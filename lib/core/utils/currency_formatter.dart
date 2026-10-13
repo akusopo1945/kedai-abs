@@ -7,6 +7,16 @@ class CurrencyFormatter {
     decimalDigits: 0,
   );
 
+  static const List<String> _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+
+  static const List<String> _monthsFull = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
   static String format(num amount) {
     return _formatter.format(amount);
   }
@@ -23,10 +33,18 @@ class CurrencyFormatter {
   }
 
   static String formatDate(DateTime date) {
-    return DateFormat('dd MMM yyyy, HH:mm', 'id_ID').format(date);
+    final day = date.day.toString().padLeft(2, '0');
+    final month = _months[date.month - 1];
+    final year = date.year;
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day $month $year, $hour:$minute';
   }
 
   static String formatDateOnly(DateTime date) {
-    return DateFormat('dd MMMM yyyy', 'id_ID').format(date);
+    final day = date.day.toString().padLeft(2, '0');
+    final month = _monthsFull[date.month - 1];
+    final year = date.year;
+    return '$day $month $year';
   }
 }
