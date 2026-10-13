@@ -208,7 +208,7 @@ class ReceiptScreen extends StatelessWidget {
                 icon: const Icon(Icons.print_outlined, size: 20),
                 label: const Text('Cetak Struk (Bluetooth ESC/POS)'),
                 onPressed: () {
-                  final text = PrinterService.instance.generateReceiptText(
+                  PrinterService.instance.generateReceiptText(
                     order: order,
                     store: store,
                   );

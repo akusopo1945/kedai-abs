@@ -295,7 +295,6 @@ class DatabaseHelper {
   }
 
   Future<Map<String, double>> getSummary(DateTime start, DateTime end) async {
-    final db = await instance.database;
     final orders = await getOrders(startDate: start, endDate: end);
 
     double totalRevenue = 0;
