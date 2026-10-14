@@ -1,10 +1,10 @@
 ---
-name: kedai-pos-premium-light
-description: Premium Clean Light Design System for Kedai POS Android
+name: kedai-pos-abs-premium-light
+description: Premium Clean Light Design System for Kedai POS Angkringan Bersua Sejenak (ABS)
 colors:
-  primary: "#2563EB"
-  primaryDark: "#1D4ED8"
-  primaryLight: "#EFF6FF"
+  primary: "#D97706"
+  primaryDark: "#B45309"
+  primaryLight: "#FEF3C7"
   accent: "#10B981"
   background: "#F8FAFC"
   surface: "#FFFFFF"
@@ -17,6 +17,8 @@ colors:
   success: "#16A34A"
   warning: "#D97706"
   danger: "#DC2626"
+  charcoal: "#1E293B"
+  goldWarm: "#F59E0B"
 typography:
   headline:
     fontFamily: "Inter"
@@ -58,44 +60,19 @@ spacing:
   xxl: "32px"
 ---
 
-# Kedai POS Design System
+# Kedai POS - Angkringan Bersua Sejenak (ABS)
 
 ## 1. Overview
-Kedai POS mengusung gaya **Premium, Clean, and Light**. Desain berfokus pada kecepatan transaksi kasir, kejelasan data numerik, dan hierarki visual yang elegan tanpa elemen berlebih.
+Kedai POS ABS menggabungkan kehangatan kuliner angkringan modern (Arang & Wedangan) dengan efisiensi sistem kasir cepat, manajemen open bill per meja, dan integrasi online self-order. Menggunakan basis visual **Premium Clean Light** yang nyaman untuk operasional kasir harian.
 
-## 2. Colors
-- **Primary:** Royal Sapphire `#2563EB` memberikan impresi profesional & terpercaya.
-- **Background:** Slate 50 `#F8FAFC` untuk kenyamanan visual saat operasional kasir seharian.
-- **Surface & Cards:** Pure White `#FFFFFF` dengan subtle shadow `0 2px 8px rgba(15, 23, 42, 0.04)` dan border tipis `#E2E8F0`.
-- **Text:** High-contrast slate `#0F172A` untuk keterbacaan optimal struk dan total nominal.
+## 2. Colors & Branding
+- **Primary:** Warm Amber `#D97706` & Golden Glow `#F59E0B` mencerminkan bara arang dan kehangatan wedangan tradisional.
+- **Background:** Slate 50 `#F8FAFC` menjaga tampilan tetap cerah, bersih, dan modern.
+- **Card / Surface:** Pure White `#FFFFFF` dengan 1px solid border `#E2E8F0` dan soft shadow.
+- **Text:** Slate 900 `#0F172A` untuk kontras angka kasir dan rincian transaksi yang tajam.
 
-## 3. Typography
-- Font clean sans-serif (`Inter`).
-- Angka uang/harga selalu semi-bold atau bold.
-- Label status kasir ringkas dengan letter-spacing proporsional.
-
-## 4. Layout & Spacing
-- Grid katalog kasir responsif (2 kolom pada ponsel potret, 3-4 kolom pada tablet).
-- Bottom Sheet checkout ergonomis (mudah dijangkau jempol satu tangan).
-- Quick cash chips (Pas, Rp 10.000, Rp 20.000, Rp 50.000, Rp 100.000).
-
-## 5. Elevation & Depth
-- Card kasir: border 1px solid `#E2E8F0`, elevation 0 atau 1dp.
-- Active cart bar: Floating badge di bagian bawah dengan shadow lembut.
-
-## 6. Shapes
-- Sudut tombol & input: `12px` (modern rounded).
-- Kategori badge: `9999px` (pill chip).
-- Dialog checkout: `20px` top corner.
-
-## 7. Components
-- `ProductCard`: Thumbnail / inisial kategori, nama produk, stok chip, badge harga.
-- `CartItemTile`: Tombol counter (+ / -) dengan haptic touch feeling.
-- `ReceiptPreview`: Visualisasi struk thermal 58mm dengan garis putus-putus realistis.
-- `StatCard`: Ringkasan omzet, keuntungan bersih, dan total transaksi.
-
-## 8. Do's and Don'ts
-- **DO:** Gunakan format rupiah standar (`Rp 25.000`).
-- **DO:** Berikan visual feedback seketika saat produk ditekan masuk keranjang.
-- **DON'T:** Jangan gunakan warna background gelap pekat secara default.
-- **DON'T:** Jangan sembunyikan tombol bayar saat keranjang berisi barang.
+## 3. Fitur Spesifik Angkringan ABS
+- **Katalog Menu Autentik ABS:** Sate-satean (Kulit Madu, Usus Bacem, Telur Puyuh, dll.), Sego Kucing, Nasi Bakar, Wedangan (Kopi Joss, Wedang Uwuh), dan Gorengan.
+- **Opsi Olahan & Suhu:** Popup pilihan cepat cara pengolahan (Bakar Manis Gurih, Bakar Pedas Membara, Langsung Makan, Panas, Hangat, Es).
+- **Manajemen Meja & Open Bill:** Pantau tagihan aktif per meja (Meja 01 - 12) atau Takeaway, akumulasi pesanan tambahan saat nongkrong, dan settle bill gabungan.
+- **Integrasi Online Order (menu-jajan):** Pantau dan kelola pesanan self-order dari QR meja pelanggan secara real-time.

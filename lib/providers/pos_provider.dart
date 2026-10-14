@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' hide Category;
 import '../core/database/database_helper.dart';
+import '../core/services/menu_jajan_api_service.dart';
 import '../models/category.dart';
 import '../models/product.dart';
 import '../models/cart_item.dart';
@@ -8,6 +9,7 @@ import '../models/store_profile.dart';
 
 class PosProvider extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper.instance;
+  final MenuJajanApiService _apiService = MenuJajanApiService();
 
   // Products & Categories
   List<Product> _products = [];
@@ -16,8 +18,11 @@ class PosProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
 
-  // Cart
-  final Map<int, CartItem> _cart = {};
+  // Table Management
+  String _selectedTable = 'Meja 01';
+
+  // Cart: key is unique item signature `${productId}_${selectedOption ?? ''}`
+  final Map<String, CartItem> _cart = {};
   double _discountAmount = 0.0;
 
   // Store & Settings
@@ -27,18 +32,27 @@ class PosProvider extends ChangeNotifier {
   List<OrderModel> _orderHistory = [];
   Map<String, double> _todaySummary = {'revenue': 0, 'profit': 0, 'transactions': 0};
 
+  // Online Sync / menu-jajan integration
+  bool _isOnlineSyncAvailable = false;
+  List<BillSummary> _liveBills = [];
+  List<dynamic> _liveOnlineOrders = [];
+
   // Getters
   List<Product> get products => _products;
   List<Category> get categories => _categories;
   String get selectedCategory => _selectedCategory;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
-  Map<int, CartItem> get cart => _cart;
+  String get selectedTable => _selectedTable;
+  Map<String, CartItem> get cart => _cart;
   List<CartItem> get cartItems => _cart.values.toList();
   StoreProfile get storeProfile => _storeProfile;
   List<OrderModel> get orderHistory => _orderHistory;
   Map<String, double> get todaySummary => _todaySummary;
   double get discountAmount => _discountAmount;
+  bool get isOnlineSyncAvailable => _isOnlineSyncAvailable;
+  List<BillSummary> get liveBills => _liveBills;
+  List<dynamic> get liveOnlineOrders => _liveOnlineOrders;
 
   int get cartCount => _cart.values.fold(0, (sum, item) => sum + item.quantity);
 
@@ -57,9 +71,51 @@ class PosProvider extends ChangeNotifier {
     await loadStoreProfile();
     await loadTodaySummary();
     await loadOrderHistory();
+    await checkOnlineSync();
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  // --- Table Selection ---
+  void setSelectedTable(String table) {
+    _selectedTable = table;
+    notifyListeners();
+  }
+
+  // --- Online Sync with menu-jajan server ---
+  Future<void> checkOnlineSync() async {
+    _isOnlineSyncAvailable = await _apiService.checkConnection();
+    if (_isOnlineSyncAvailable) {
+      await fetchLiveOnlineData();
+    }
+    notifyListeners();
+  }
+
+  Future<void> fetchLiveOnlineData() async {
+    try {
+      final bills = await _apiService.getLiveBills();
+      final orders = await _apiService.getLiveOrders();
+      _liveBills = bills;
+      _liveOnlineOrders = orders;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<bool> updateOnlineOrderStatus(String orderId, String newStatus) async {
+    final success = await _apiService.updateOrderStatus(orderId, newStatus);
+    if (success) {
+      await fetchLiveOnlineData();
+    }
+    return success;
+  }
+
+  Future<bool> settleTableBill(String meja) async {
+    final success = await _apiService.settleBill(meja);
+    if (success) {
+      await fetchLiveOnlineData();
+    }
+    return success;
   }
 
   // --- Category Actions ---
@@ -98,38 +154,46 @@ class PosProvider extends ChangeNotifier {
 
   Future<void> deleteProduct(int id) async {
     await _db.deleteProduct(id);
-    _cart.remove(id);
+    _cart.removeWhere((key, item) => item.product.id == id);
     await loadProducts();
   }
 
   // --- Cart Actions ---
-  void addToCart(Product product) {
+  void addToCart(Product product, {String? selectedOption, String? note}) {
     if (product.stock <= 0) return;
 
-    if (_cart.containsKey(product.id)) {
-      final currentQty = _cart[product.id]!.quantity;
+    final optionKey = selectedOption ?? '';
+    final cartKey = '${product.id}_$optionKey';
+
+    if (_cart.containsKey(cartKey)) {
+      final currentQty = _cart[cartKey]!.quantity;
       if (currentQty < product.stock) {
-        _cart[product.id]!.quantity++;
+        _cart[cartKey]!.quantity++;
       }
     } else {
-      _cart[product.id!] = CartItem(product: product, quantity: 1);
+      _cart[cartKey] = CartItem(
+        product: product,
+        quantity: 1,
+        selectedOption: selectedOption,
+        note: note,
+      );
     }
     notifyListeners();
   }
 
-  void decreaseQuantity(int productId) {
-    if (!_cart.containsKey(productId)) return;
+  void decreaseQuantity(String cartKey) {
+    if (!_cart.containsKey(cartKey)) return;
 
-    if (_cart[productId]!.quantity > 1) {
-      _cart[productId]!.quantity--;
+    if (_cart[cartKey]!.quantity > 1) {
+      _cart[cartKey]!.quantity--;
     } else {
-      _cart.remove(productId);
+      _cart.remove(cartKey);
     }
     notifyListeners();
   }
 
-  void removeFromCart(int productId) {
-    _cart.remove(productId);
+  void removeFromCart(String cartKey) {
+    _cart.remove(cartKey);
     notifyListeners();
   }
 
@@ -149,11 +213,13 @@ class PosProvider extends ChangeNotifier {
     required double paymentAmount,
     required String paymentMethod,
     String? customerName,
+    String? tableNumber,
   }) async {
     if (_cart.isEmpty) return null;
 
     final now = DateTime.now();
     final invoiceNumber = 'INV-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+    final targetTable = tableNumber ?? _selectedTable;
 
     final items = _cart.values.map((item) {
       return OrderItem(
@@ -164,6 +230,7 @@ class PosProvider extends ChangeNotifier {
         quantity: item.quantity,
         subtotal: item.subtotal,
         note: item.note,
+        selectedOption: item.selectedOption,
       );
     }).toList();
 
@@ -179,6 +246,8 @@ class PosProvider extends ChangeNotifier {
       changeAmount: changeAmount,
       paymentMethod: paymentMethod,
       customerName: customerName,
+      tableNumber: targetTable,
+      status: 'selesai',
       items: items,
     );
 
@@ -194,6 +263,8 @@ class PosProvider extends ChangeNotifier {
       changeAmount: order.changeAmount,
       paymentMethod: order.paymentMethod,
       customerName: order.customerName,
+      tableNumber: targetTable,
+      status: 'selesai',
       items: items,
     );
 
@@ -201,6 +272,11 @@ class PosProvider extends ChangeNotifier {
     await loadProducts();
     await loadTodaySummary();
     await loadOrderHistory();
+
+    // If online sync active and meja settled, notify API
+    if (_isOnlineSyncAvailable && targetTable.isNotEmpty) {
+      settleTableBill(targetTable);
+    }
 
     return createdOrder;
   }

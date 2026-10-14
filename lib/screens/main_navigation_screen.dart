@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import 'pos/pos_screen.dart';
+import 'tables/table_bills_screen.dart';
 import 'products/product_management_screen.dart';
 import 'reports/reports_screen.dart';
 import 'settings/settings_screen.dart';
@@ -17,6 +18,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   final List<Widget> _screens = const [
     PosScreen(),
+    TableBillsScreen(),
     ProductManagementScreen(),
     ReportsScreen(),
     SettingsScreen(),
@@ -45,6 +47,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.point_of_sale_outlined),
               selectedIcon: Icon(Icons.point_of_sale, color: AppTheme.primary),
               label: 'Kasir',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.table_restaurant_outlined),
+              selectedIcon: Icon(Icons.table_restaurant, color: AppTheme.primary),
+              label: 'Meja & Online',
             ),
             NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined),

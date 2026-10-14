@@ -6,10 +6,10 @@ class StoreProfile {
   final int paperWidth; // 58 or 80 mm
 
   StoreProfile({
-    this.name = 'Kedai Kopi & Kasir',
-    this.address = 'Jl. Melati No. 12, Jakarta',
-    this.phone = '0812-3456-7890',
-    this.receiptFooter = 'Terima Kasih Atas Kunjungan Anda!\nBarang yang sudah dibeli tidak dapat ditukar.',
+    this.name = 'Angkringan Bersua Sejenak',
+    this.address = 'Jl. Raya Wagir, Hal. SDN Sitirejo 4 (Barat SMPN 1 Wagir)',
+    this.phone = '6281249176420',
+    this.receiptFooter = 'Matur Nuwun Sampun Pinarak!\nKhas Yogyakarta • Arang & Wedangan',
     this.paperWidth = 58,
   });
 
@@ -25,10 +25,10 @@ class StoreProfile {
 
   factory StoreProfile.fromMap(Map<String, dynamic> map) {
     return StoreProfile(
-      name: map['name'] as String? ?? 'Kedai Kopi & Kasir',
-      address: map['address'] as String? ?? 'Jl. Melati No. 12, Jakarta',
-      phone: map['phone'] as String? ?? '0812-3456-7890',
-      receiptFooter: map['receipt_footer'] as String? ?? 'Terima Kasih Atas Kunjungan Anda!',
+      name: map['name'] as String? ?? 'Angkringan Bersua Sejenak',
+      address: map['address'] as String? ?? 'Jl. Raya Wagir, Hal. SDN Sitirejo 4 (Barat SMPN 1 Wagir)',
+      phone: map['phone'] as String? ?? '6281249176420',
+      receiptFooter: map['receipt_footer'] as String? ?? 'Matur Nuwun Sampun Pinarak!',
       paperWidth: map['paper_width'] as int? ?? 58,
     );
   }

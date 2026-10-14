@@ -36,7 +36,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
     _stockController = TextEditingController(
       text: p != null ? p.stock.toString() : '0',
     );
-    _selectedCategory = p?.category ?? 'Makanan';
+    _selectedCategory = p?.category ?? 'Sate-satean';
   }
 
   @override

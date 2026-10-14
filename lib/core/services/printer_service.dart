@@ -28,6 +28,9 @@ class PrinterService {
     // Order Info
     buffer.writeln('No. Struk : ${order.invoiceNumber}');
     buffer.writeln('Waktu     : ${CurrencyFormatter.formatDate(order.createdAt)}');
+    if (order.tableNumber != null && order.tableNumber!.isNotEmpty) {
+      buffer.writeln('Meja      : ${order.tableNumber}');
+    }
     if (order.customerName != null && order.customerName!.isNotEmpty) {
       buffer.writeln('Pelanggan : ${order.customerName}');
     }
@@ -36,7 +39,10 @@ class PrinterService {
 
     // Items
     for (final item in order.items) {
-      buffer.writeln(item.productName);
+      final nameWithOption = item.selectedOption != null && item.selectedOption!.isNotEmpty
+          ? '${item.productName} (${item.selectedOption})'
+          : item.productName;
+      buffer.writeln(nameWithOption);
       final qtyAndPrice = '  ${item.quantity} x ${CurrencyFormatter.format(item.unitPrice)}';
       final subtotal = CurrencyFormatter.format(item.subtotal);
       buffer.writeln(_twoColumnText(qtyAndPrice, subtotal, width));

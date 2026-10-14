@@ -8,6 +8,7 @@ class OrderItem {
   final int quantity;
   final double subtotal;
   final String? note;
+  final String? selectedOption;
 
   OrderItem({
     this.id,
@@ -19,6 +20,7 @@ class OrderItem {
     required this.quantity,
     required this.subtotal,
     this.note,
+    this.selectedOption,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +34,7 @@ class OrderItem {
       'quantity': quantity,
       'subtotal': subtotal,
       'note': note,
+      'selected_option': selectedOption,
     };
   }
 
@@ -46,6 +49,7 @@ class OrderItem {
       quantity: map['quantity'] as int,
       subtotal: (map['subtotal'] as num).toDouble(),
       note: map['note'] as String?,
+      selectedOption: map['selected_option'] as String?,
     );
   }
 }
@@ -61,6 +65,8 @@ class OrderModel {
   final double changeAmount;
   final String paymentMethod; // 'cash', 'qris', 'transfer'
   final String? customerName;
+  final String? tableNumber;
+  final String status; // 'pending', 'selesai', 'dibatalkan'
   final List<OrderItem> items;
 
   OrderModel({
@@ -74,6 +80,8 @@ class OrderModel {
     required this.changeAmount,
     required this.paymentMethod,
     this.customerName,
+    this.tableNumber,
+    this.status = 'selesai',
     this.items = const [],
   });
 
@@ -89,6 +97,8 @@ class OrderModel {
       'change_amount': changeAmount,
       'payment_method': paymentMethod,
       'customer_name': customerName,
+      'table_number': tableNumber,
+      'status': status,
     };
   }
 
@@ -104,6 +114,8 @@ class OrderModel {
       changeAmount: (map['change_amount'] as num).toDouble(),
       paymentMethod: map['payment_method'] as String,
       customerName: map['customer_name'] as String?,
+      tableNumber: map['table_number'] as String?,
+      status: map['status'] as String? ?? 'selesai',
       items: items,
     );
   }

@@ -25,35 +25,34 @@ class ProductCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isInCart ? AppTheme.primary : AppTheme.border,
-          width: isInCart ? 1.5 : 1.0,
+          width: isInCart ? 1.8 : 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTap: isOutOfStock ? null : onAdd,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header: Category Pill & Stock/Cart Badge
+                // Header row: Category Pill & Badges
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppTheme.borderSubtle,
                         borderRadius: BorderRadius.circular(6),
@@ -67,48 +66,65 @@ class ProductCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (isInCart)
+                    const Spacer(),
+                    if (product.badgeKhusus != null && product.badgeKhusus!.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(12),
+                          color: AppTheme.primaryLight,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
                         ),
                         child: Text(
-                          '$cartQuantity di keranjang',
+                          product.badgeKhusus!,
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: AppTheme.primaryDark,
                           ),
-                        ),
-                      )
-                    else
-                      Text(
-                        isOutOfStock ? 'Habis' : 'Stok: ${product.stock}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: isOutOfStock ? AppTheme.danger : AppTheme.textMuted,
                         ),
                       ),
                   ],
                 ),
-                const Spacer(),
+                const SizedBox(height: 8),
+
+                // Culinary Tag
+                if (product.tagKuliner != null && product.tagKuliner!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department, size: 12, color: AppTheme.primary),
+                        const SizedBox(width: 3),
+                        Text(
+                          product.tagKuliner!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Product Name
                 Text(
                   product.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                     color: isOutOfStock ? AppTheme.textMuted : AppTheme.textPrimary,
                     height: 1.25,
                   ),
                 ),
-                const SizedBox(height: 8),
-                // Price & Quick Action
+
+                const Spacer(),
+
+                // Price, Stock & Add Action
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -119,9 +135,18 @@ class ProductCard extends StatelessWidget {
                         Text(
                           CurrencyFormatter.format(product.sellPrice),
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
                             color: isOutOfStock ? AppTheme.textMuted : AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isOutOfStock ? 'Habis' : 'Stok: ${product.stock}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: isOutOfStock ? AppTheme.danger : AppTheme.textMuted,
                           ),
                         ),
                       ],

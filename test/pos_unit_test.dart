@@ -62,6 +62,7 @@ void main() {
       final order = OrderModel(
         invoiceNumber: 'INV-20261013-0001',
         createdAt: DateTime(2026, 10, 13, 14, 30),
+        tableNumber: 'Meja 04',
         totalAmount: 36000,
         discountAmount: 0,
         finalAmount: 36000,
@@ -71,7 +72,8 @@ void main() {
         items: [
           OrderItem(
             productId: 1,
-            productName: 'Kopi Susu Aren',
+            productName: 'Sate Kulit Ayam Madu',
+            selectedOption: 'Bakar Pedas Membara',
             unitPrice: 18000,
             buyPrice: 8000,
             quantity: 2,
@@ -87,7 +89,8 @@ void main() {
 
       expect(receipt, contains('KEDAI BERKAH'));
       expect(receipt, contains('INV-20261013-0001'));
-      expect(receipt, contains('Kopi Susu Aren'));
+      expect(receipt, contains('Meja 04'));
+      expect(receipt, contains('Sate Kulit Ayam Madu (Bakar Pedas Membara)'));
       expect(receipt, contains('Kembalian'));
     });
   });

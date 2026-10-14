@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  static const Color primary = Color(0xFF2563EB); // Royal Sapphire
-  static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color primaryLight = Color(0xFFEFF6FF);
+  static const Color primary = Color(0xFFD97706); // Warm Amber
+  static const Color primaryDark = Color(0xFFB45309);
+  static const Color primaryLight = Color(0xFFFEF3C7);
   static const Color accent = Color(0xFF10B981); // Emerald
   static const Color background = Color(0xFFF8FAFC); // Slate 50
   static const Color surface = Color(0xFFFFFFFF);
@@ -17,6 +17,7 @@ class AppTheme {
   static const Color success = Color(0xFF16A34A);
   static const Color warning = Color(0xFFD97706);
   static const Color danger = Color(0xFFDC2626);
+  static const Color charcoal = Color(0xFF1E293B);
 
   static ThemeData get lightTheme {
     final baseTextTheme = GoogleFonts.interTextTheme();
