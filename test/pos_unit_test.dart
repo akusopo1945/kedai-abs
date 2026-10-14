@@ -94,4 +94,39 @@ void main() {
       expect(receipt, contains('Kembalian'));
     });
   });
+
+  group('MenuJajanApiService Model Tests', () {
+    test('Normalizes table numbers correctly', () {
+      expect(MenuJajanApiService.normalizeMeja('Meja 01'), '01');
+      expect(MenuJajanApiService.normalizeMeja('meja 12'), '12');
+      expect(MenuJajanApiService.normalizeMeja('05'), '05');
+      expect(MenuJajanApiService.normalizeMeja('Bungkus'), 'Bungkus');
+    });
+
+    test('Parses BillSummary from backend format correctly', () {
+      final sample = {
+        'nomorMeja': '01',
+        'namaPemesan': 'Risa',
+        'waktuAwal': '2026-10-12T18:49:19.564Z',
+        'totalTagihan': 49000,
+        'jumlahPesanan': 4,
+        'items': [
+          {
+            'nama': 'Sate Kulit Ayam Madu',
+            'opsi': 'Bakar Manis Gurih',
+            'jumlah': 6,
+            'hargaSatuan': 3000,
+            'subtotal': 18000,
+          }
+        ],
+      };
+
+      final bill = BillSummary.fromMap(sample);
+      expect(bill.nomorMeja, '01');
+      expect(bill.totalTagihan, 49000);
+      expect(bill.items.length, 1);
+      expect(bill.items.first.nama, 'Sate Kulit Ayam Madu');
+      expect(bill.items.first.opsi, 'Bakar Manis Gurih');
+    });
+  });
 }

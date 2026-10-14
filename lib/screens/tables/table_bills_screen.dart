@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/menu_jajan_api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/pos_provider.dart';
@@ -63,7 +64,14 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
               await pos.checkOnlineSync();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Data berhasil diperbarui dari server online')),
+                  SnackBar(
+                    content: Text(
+                      pos.isOnlineSyncAvailable
+                          ? 'Data berhasil diperbarui dari server online'
+                          : 'Server tidak terjangkau. Periksa koneksi atau IP VPS.',
+                    ),
+                    backgroundColor: pos.isOnlineSyncAvailable ? AppTheme.accent : AppTheme.danger,
+                  ),
                 );
               }
             },
@@ -80,7 +88,7 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
               text: 'Tagihan Meja (${pos.liveBills.length})',
             ),
             Tab(
-              text: 'Antrean Masuk (${pos.liveOnlineOrders.where((o) => o['status'] != 'selesai').length})',
+              text: 'Antrean Masuk (${pos.liveOnlineOrders.where((o) => (o['status'] ?? '') != 'selesai' && (o['status'] ?? '') != 'dibatalkan').length})',
             ),
           ],
         ),
@@ -108,7 +116,7 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Aplikasi kasir berjalan 100% lokal via SQLite. Hubungkan ke server Angkringan ABS lokal untuk sinkronisasi tagihan meja dan pesanan QR otomatis.',
+                      'Aplikasi kasir berjalan 100% lokal via SQLite. Hubungkan ke server Angkringan ABS untuk sinkronisasi tagihan meja dan pesanan QR otomatis.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
                     ),
@@ -165,59 +173,47 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
               child: const Icon(Icons.table_bar, color: AppTheme.primaryDark, size: 20),
             ),
             title: Text(
-              'Meja ${bill.meja}',
+              'Meja ${bill.nomorMeja}',
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
             subtitle: Text(
-              '${bill.totalPesanan} Pesanan • Total ${CurrencyFormatter.format(bill.totalTagihan)}',
+              '${bill.namaPemesan} • ${bill.jumlahPesanan} Pesanan • Total ${CurrencyFormatter.format(bill.totalTagihan)}',
               style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
               const Divider(color: AppTheme.borderSubtle),
-              ...bill.orders.map((ord) {
-                final items = ord['items'] as List<dynamic>? ?? [];
+              // Daftar item akumulasi
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Rincian Menu Dipesan:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                ),
+              ),
+              const SizedBox(height: 6),
+              ...bill.items.map((it) {
+                final opsiStr = it.opsi != null && it.opsi!.isNotEmpty ? ' (${it.opsi})' : '';
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Order #${ord['id']?.toString().substring(0, 8) ?? ''}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppTheme.primary),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: ord['status'] == 'selesai'
-                                  ? AppTheme.success.withOpacity(0.12)
-                                  : AppTheme.accent.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              ord['status']?.toString().toUpperCase() ?? 'PENDING',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: ord['status'] == 'selesai' ? AppTheme.success : AppTheme.accent,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Expanded(
+                        child: Text(
+                          '${it.jumlah}x ${it.nama}$opsiStr',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      ...items.map((it) => Text(
-                            '• ${it['jumlah']}x ${it['nama']} (${it['opsiPilihan'] ?? '-'}) - ${CurrencyFormatter.format((it['subtotal'] as num?)?.toDouble() ?? 0)}',
-                            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                          )),
+                      Text(
+                        CurrencyFormatter.format(it.subtotal),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                     ],
                   ),
                 );
               }),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -225,8 +221,10 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: Text('Lunaskan Meja ${bill.meja}?'),
-                        content: Text('Total tagihan senilai ${CurrencyFormatter.format(bill.totalTagihan)} akan ditandai lunas.'),
+                        title: Text('Lunaskan Meja ${bill.nomorMeja}?'),
+                        content: Text(
+                          'Total tagihan senilai ${CurrencyFormatter.format(bill.totalTagihan)} akan ditandai lunas di web menu-jajan.',
+                        ),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
                           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lunaskan')),
@@ -234,7 +232,7 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                       ),
                     );
                     if (confirm == true) {
-                      await pos.settleTableBill(bill.meja);
+                      await pos.settleTableBill(bill.nomorMeja);
                     }
                   },
                   icon: const Icon(Icons.check_circle_outline, size: 18),
@@ -261,9 +259,13 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
       padding: const EdgeInsets.all(16),
       itemCount: pos.liveOnlineOrders.length,
       itemBuilder: (context, index) {
-        final order = pos.liveOnlineOrders[index];
+        final order = pos.liveOnlineOrders[index] as Map<String, dynamic>;
         final items = (order['items'] as List<dynamic>?) ?? [];
-        final status = order['status']?.toString() ?? 'pending';
+        final status = (order['status']?.toString() ?? 'menunggu').toLowerCase();
+        final orderId = order['idPesanan']?.toString() ?? order['id']?.toString() ?? '';
+        final nomorMeja = order['nomorMeja']?.toString() ?? '-';
+        final namaPemesan = order['namaPemesan']?.toString() ?? order['namaPelanggan']?.toString() ?? 'Pelanggan';
+        final totalHarga = (order['totalHarga'] as num?)?.toDouble() ?? 0.0;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -288,44 +290,57 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          'Meja ${order['nomorMeja'] ?? '-'}',
+                          'Meja $nomorMeja',
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppTheme.primaryDark),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        order['namaPelanggan'] ?? 'Pelanggan',
+                        namaPemesan,
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                     ],
                   ),
                   Text(
-                    CurrencyFormatter.format((order['totalHarga'] as num?)?.toDouble() ?? 0),
+                    CurrencyFormatter.format(totalHarga),
                     style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.primary),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              ...items.map((it) => Text(
-                    '${it['jumlah']}x ${it['nama']} ${it['opsiPilihan'] != null ? "(${it['opsiPilihan']})" : ""}',
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                  )),
+              ...items.map((it) {
+                final opsi = it['opsiDipilih'] ?? it['opsiPilihan'];
+                final opsiStr = opsi != null ? ' ($opsi)' : '';
+                return Text(
+                  '• ${it['jumlah']}x ${it['nama']}$opsiStr',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                );
+              }),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (status == 'pending') ...[
+                  if (status == 'menunggu' || status == 'pending') ...[
                     OutlinedButton(
-                      onPressed: () => pos.updateOnlineOrderStatus(order['id'], 'diproses'),
+                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'proses_bakar'),
                       child: const Text('Terima & Bakar'),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  if (status == 'diproses') ...[
+                  if (status == 'proses_bakar' || status == 'diproses') ...[
                     ElevatedButton(
-                      onPressed: () => pos.updateOnlineOrderStatus(order['id'], 'selesai'),
+                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'siap_saji'),
                       child: const Text('Siap Disajikan'),
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (status == 'siap_saji') ...[
+                    ElevatedButton(
+                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'selesai'),
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
+                      child: const Text('Selesaikan'),
+                    ),
+                    const SizedBox(width: 8),
                   ],
                   if (status == 'selesai') ...[
                     const Chip(

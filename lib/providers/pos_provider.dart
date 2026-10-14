@@ -95,6 +95,74 @@ class PosProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<ApiTestResult> testApiConnection([String? customUrl]) async {
+    final service = customUrl != null && customUrl.isNotEmpty
+        ? MenuJajanApiService(baseUrl: customUrl)
+        : _apiService;
+    final result = await service.testConnection();
+    _isOnlineSyncAvailable = result.isSuccess;
+    if (_isOnlineSyncAvailable) {
+      await fetchLiveOnlineData();
+    }
+    notifyListeners();
+    return result;
+  }
+
+  Future<int> syncMenuFromOnline() async {
+    try {
+      final liveMenu = await _apiService.getLiveMenu();
+      if (liveMenu.isEmpty) return 0;
+
+      int updatedCount = 0;
+      for (final item in liveMenu) {
+        final nama = item['nama']?.toString();
+        if (nama == null) continue;
+
+        final harga = (item['harga'] as num?)?.toDouble() ?? 0.0;
+        final tersedia = item['tersedia'] != false;
+        final deskripsi = item['deskripsi']?.toString();
+        final tagKuliner = item['tagKuliner']?.toString();
+        final badgeKhusus = item['badgeKhusus']?.toString();
+
+        List<String> opsiList = [];
+        if (item['opsiConfig'] != null && item['opsiConfig']['daftarPilihan'] is List) {
+          opsiList = (item['opsiConfig']['daftarPilihan'] as List)
+              .map((e) => e.toString())
+              .toList();
+        }
+
+        // Match existing product by name
+        final existingList = await _db.getProducts(query: nama);
+        final match = existingList.where((p) => p.name.toLowerCase() == nama.toLowerCase()).firstOrNull;
+
+        if (match != null) {
+          final updated = Product(
+            id: match.id,
+            name: match.name,
+            sku: match.sku,
+            category: match.category,
+            buyPrice: match.buyPrice,
+            sellPrice: harga > 0 ? harga : match.sellPrice,
+            stock: tersedia ? (match.stock <= 0 ? 50 : match.stock) : 0,
+            tagKuliner: tagKuliner ?? match.tagKuliner,
+            badgeKhusus: badgeKhusus ?? match.badgeKhusus,
+            description: deskripsi ?? match.description,
+            opsiList: opsiList.isNotEmpty ? opsiList : match.opsiList,
+          );
+          await _db.updateProduct(updated);
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        await loadProducts();
+      }
+      return updatedCount;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> fetchLiveOnlineData() async {
     try {
       final bills = await _apiService.getLiveBills();

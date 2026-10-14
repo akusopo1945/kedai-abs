@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/services/menu_jajan_api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/store_profile.dart';
 import '../../providers/pos_provider.dart';
@@ -20,6 +21,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _footerController;
   late TextEditingController _serverUrlController;
   int _paperWidth = 58;
+
+  bool _isTestingApi = false;
+  bool _isSyncingMenu = false;
+  ApiTestResult? _lastTestResult;
 
   @override
   void initState() {
@@ -41,6 +46,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _footerController.dispose();
     _serverUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleTestApi(PosProvider pos) async {
+    setState(() {
+      _isTestingApi = true;
+      _lastTestResult = null;
+    });
+
+    final targetUrl = _serverUrlController.text.trim().isNotEmpty
+        ? _serverUrlController.text.trim()
+        : pos.storeProfile.serverUrl;
+
+    final result = await pos.testApiConnection(targetUrl);
+
+    if (mounted) {
+      setState(() {
+        _isTestingApi = false;
+        _lastTestResult = result;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? (result.isSuccess ? 'Terhubung!' : 'Koneksi gagal')),
+          backgroundColor: result.isSuccess ? AppTheme.accent : AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleSyncMenu(PosProvider pos) async {
+    setState(() => _isSyncingMenu = true);
+
+    final count = await pos.syncMenuFromOnline();
+
+    if (mounted) {
+      setState(() => _isSyncingMenu = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count > 0
+                ? '$count menu berhasil disinkronkan dari server online!'
+                : 'Tidak ada perubahan menu atau server offline.',
+          ),
+          backgroundColor: count > 0 ? AppTheme.accent : AppTheme.textSecondary,
+        ),
+      );
+    }
   }
 
   @override
@@ -100,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       maxLines: 2,
                       decoration: const InputDecoration(
                         labelText: 'Catatan Footer Struk',
-                        hintText: 'Contoh: Terima Kasih Atas Kunjungan Anda!',
+                        hintText: 'Contoh: Matur Nuwun Sampun Pinarak!',
                       ),
                     ),
                   ],
@@ -170,7 +222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               // Section 3: Server Sync (VPS / Local)
               const Text(
-                'Koneksi Server Online (VPS)',
+                'Koneksi Server Online & API (menu-jajan)',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -197,28 +249,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       validator: (v) => v == null || v.isEmpty ? 'URL Server wajib diisi' : null,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
+
+                    // Test API & Sync Menu Action Buttons
                     Row(
                       children: [
-                        Icon(
-                          pos.isOnlineSyncAvailable ? Icons.check_circle : Icons.info_outline,
-                          size: 16,
-                          color: pos.isOnlineSyncAvailable ? AppTheme.success : AppTheme.accent,
-                        ),
-                        const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            pos.isOnlineSyncAvailable
-                                ? 'Terhubung ke server VPS (Sync Meja Aktif)'
-                                : 'Belum terhubung. Pastikan port 3015 terbuka & IP sesuai.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: pos.isOnlineSyncAvailable ? AppTheme.success : AppTheme.textSecondary,
-                            ),
+                          child: OutlinedButton.icon(
+                            onPressed: _isTestingApi ? null : () => _handleTestApi(pos),
+                            icon: _isTestingApi
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.network_check, size: 18),
+                            label: Text(_isTestingApi ? 'Menguji...' : 'Tes Koneksi & API'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isSyncingMenu ? null : () => _handleSyncMenu(pos),
+                            icon: _isSyncingMenu
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.sync, size: 18),
+                            label: Text(_isSyncingMenu ? 'Menyinkronkan...' : 'Tarik Menu Web'),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Status Result Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                            ? AppTheme.success.withOpacity(0.08)
+                            : AppTheme.danger.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                              ? AppTheme.success.withOpacity(0.3)
+                              : AppTheme.danger.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                ? Icons.check_circle
+                                : Icons.error_outline,
+                            size: 18,
+                            color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                ? AppTheme.success
+                                : AppTheme.danger,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                      ? 'Server Terhubung & Aktif'
+                                      : 'Server Belum Terhubung',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                        ? AppTheme.success
+                                        : AppTheme.danger,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _lastTestResult?.message ??
+                                      (pos.isOnlineSyncAvailable
+                                          ? 'Sinkronisasi meja & pesanan mandiri QR online aktif.'
+                                          : 'Pastikan IP VPS dan port 3015 terbuka di Security Group AWS.'),
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                ),
+                                if (_lastTestResult?.warungName != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Warung: ${_lastTestResult!.warungName} (Mode: ${_lastTestResult!.operationalMode?.toUpperCase()}) • Latensi: ${_lastTestResult!.latencyMs}ms',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -247,7 +380,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Pengaturan & koneksi server berhasil disimpan'),
+                            content: Text('Pengaturan toko & koneksi server berhasil disimpan'),
                             backgroundColor: AppTheme.accent,
                           ),
                         );
@@ -266,7 +399,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const Icon(Icons.offline_bolt_outlined, color: AppTheme.accent, size: 28),
                     const SizedBox(height: 4),
                     const Text(
-                      'Sistem Beroperasi 100% Offline (SQLite Lokal)',
+                      'Arsitektur Hybrid: Offline-First SQLite + Online Sync VPS',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -275,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Versi ${AppConstants.appVersion} • Kedai POS UMKM',
+                      'Versi ${AppConstants.appVersion} • Kedai POS Angkringan ABS',
                       style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                     ),
                   ],
