@@ -101,7 +101,8 @@ class DatabaseHelper {
         address TEXT NOT NULL,
         phone TEXT NOT NULL,
         receipt_footer TEXT NOT NULL,
-        paper_width INTEGER NOT NULL DEFAULT 58
+        paper_width INTEGER NOT NULL DEFAULT 58,
+        server_url TEXT NOT NULL DEFAULT 'http://13.211.188.77:3015'
       )
     ''');
 

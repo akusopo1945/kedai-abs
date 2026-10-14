@@ -8,8 +8,8 @@ import '../models/order.dart';
 import '../models/store_profile.dart';
 
 class PosProvider extends ChangeNotifier {
-  final DatabaseHelper _db = DatabaseHelper.instance;
-  final MenuJajanApiService _apiService = MenuJajanApiService();
+  DatabaseHelper _db = DatabaseHelper.instance;
+  MenuJajanApiService get _apiService => MenuJajanApiService(baseUrl: _storeProfile.serverUrl);
 
   // Products & Categories
   List<Product> _products = [];
@@ -66,9 +66,9 @@ class PosProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
+    await loadStoreProfile();
     await loadCategories();
     await loadProducts();
-    await loadStoreProfile();
     await loadTodaySummary();
     await loadOrderHistory();
     await checkOnlineSync();
@@ -88,6 +88,9 @@ class PosProvider extends ChangeNotifier {
     _isOnlineSyncAvailable = await _apiService.checkConnection();
     if (_isOnlineSyncAvailable) {
       await fetchLiveOnlineData();
+    } else {
+      _liveBills = [];
+      _liveOnlineOrders = [];
     }
     notifyListeners();
   }
@@ -305,6 +308,7 @@ class PosProvider extends ChangeNotifier {
   Future<void> updateStoreProfile(StoreProfile profile) async {
     await _db.saveStoreProfile(profile);
     _storeProfile = profile;
+    await checkOnlineSync();
     notifyListeners();
   }
 }

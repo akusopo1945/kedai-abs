@@ -39,6 +39,6 @@ class AppConstants {
     100000,
   ];
 
-  // Default Sync Server URL (menu-jajan PM2 backend)
-  static const String defaultServerUrl = 'http://127.0.0.1:3015';
+  // Default Sync Server URL (menu-jajan PM2 backend on VPS)
+  static const String defaultServerUrl = 'http://13.211.188.77:3015';
 }

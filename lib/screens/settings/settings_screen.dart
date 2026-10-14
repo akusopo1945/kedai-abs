@@ -18,6 +18,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _addressController;
   late TextEditingController _phoneController;
   late TextEditingController _footerController;
+  late TextEditingController _serverUrlController;
   int _paperWidth = 58;
 
   @override
@@ -28,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _addressController = TextEditingController(text: profile.address);
     _phoneController = TextEditingController(text: profile.phone);
     _footerController = TextEditingController(text: profile.receiptFooter);
+    _serverUrlController = TextEditingController(text: profile.serverUrl);
     _paperWidth = profile.paperWidth;
   }
 
@@ -37,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _addressController.dispose();
     _phoneController.dispose();
     _footerController.dispose();
+    _serverUrlController.dispose();
     super.dispose();
   }
 
@@ -163,6 +166,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+              const SizedBox(height: 20),
+
+              // Section 3: Server Sync (VPS / Local)
+              const Text(
+                'Koneksi Server Online (VPS)',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _serverUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL Server / IP VPS *',
+                        hintText: 'http://13.211.188.77:3015',
+                        prefixIcon: Icon(Icons.dns_outlined, size: 20),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'URL Server wajib diisi' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          pos.isOnlineSyncAvailable ? Icons.check_circle : Icons.info_outline,
+                          size: 16,
+                          color: pos.isOnlineSyncAvailable ? AppTheme.success : AppTheme.accent,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            pos.isOnlineSyncAvailable
+                                ? 'Terhubung ke server VPS (Sync Meja Aktif)'
+                                : 'Belum terhubung. Pastikan port 3015 terbuka & IP sesuai.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: pos.isOnlineSyncAvailable ? AppTheme.success : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 24),
 
               // Save Button
@@ -180,12 +241,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         phone: _phoneController.text.trim(),
                         receiptFooter: _footerController.text.trim(),
                         paperWidth: _paperWidth,
+                        serverUrl: _serverUrlController.text.trim(),
                       );
                       await pos.updateStoreProfile(updated);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Pengaturan toko berhasil diperbarui'),
+                            content: Text('Pengaturan & koneksi server berhasil disimpan'),
                             backgroundColor: AppTheme.accent,
                           ),
                         );
