@@ -91,7 +91,10 @@ jobs:
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$apksigner"
           "$apksigner" verify --verbose "$apk"
-          sha256sum "$apk" > "$apk.sha256"
+          (
+            cd "$(dirname "$apk")"
+            sha256sum "$(basename "$apk")" > "$(basename "$apk").sha256"
+          )
           tar -czf build/app-release-symbols.tar.gz -C build/symbols .
 
       - name: Upload installable APK and checksum
