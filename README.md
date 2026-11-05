@@ -28,7 +28,7 @@ Aplikasi Point of Sale (POS) Android berbasis **Flutter** dengan konsep **Offlin
 
 ## 🚀 Build Otomatis APK via GitHub Actions (0 Beban VPS)
 
-Workflow `.github/workflows/build-apk.yml` menjalankan analisis Dart, unit test, build APK release, verifikasi tanda tangan, dan checksum SHA-256. APK dan simbol obfuscation tersedia di **Actions > Artifacts** selama 14 hari.
+Workflow `.github/workflows/build-apk.yml` menjalankan analisis Dart, unit test, build APK release, verifikasi tanda tangan, dan checksum SHA-256. APK/checksum tersedia di **Actions > Artifacts** selama 14 hari; simbol obfuscation disimpan sebagai artifact terpisah selama 90 hari dan tidak dipublikasikan bersama GitHub Release.
 
 Build dari branch, pull request, dan workflow manual memakai kunci sementara untuk pengujian; APK tersebut tidak dapat dipakai untuk memperbarui instalasi rilis. Rilis bertag memakai keystore permanen. Sebelum membuat tag rilis, simpan keempat secret berikut di **Settings > Secrets and variables > Actions**:
 
