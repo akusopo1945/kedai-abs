@@ -67,6 +67,7 @@ class OrderModel {
   final String? customerName;
   final String? tableNumber;
   final String status; // 'pending', 'selesai', 'dibatalkan'
+  final bool costKnown;
   final List<OrderItem> items;
 
   OrderModel({
@@ -82,6 +83,7 @@ class OrderModel {
     this.customerName,
     this.tableNumber,
     this.status = 'selesai',
+    this.costKnown = true,
     this.items = const [],
   });
 
@@ -99,10 +101,14 @@ class OrderModel {
       'customer_name': customerName,
       'table_number': tableNumber,
       'status': status,
+      'cost_known': costKnown ? 1 : 0,
     };
   }
 
-  factory OrderModel.fromMap(Map<String, dynamic> map, {List<OrderItem> items = const []}) {
+  factory OrderModel.fromMap(
+    Map<String, dynamic> map, {
+    List<OrderItem> items = const [],
+  }) {
     return OrderModel(
       id: map['id'] as int?,
       invoiceNumber: map['invoice_number'] as String,
@@ -116,6 +122,7 @@ class OrderModel {
       customerName: map['customer_name'] as String?,
       tableNumber: map['table_number'] as String?,
       status: map['status'] as String? ?? 'selesai',
+      costKnown: map['cost_known'] == null || map['cost_known'] == 1,
       items: items,
     );
   }

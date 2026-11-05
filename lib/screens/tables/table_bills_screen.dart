@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/services/menu_jajan_api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/pos_provider.dart';
@@ -13,7 +12,8 @@ class TableBillsScreen extends StatefulWidget {
   State<TableBillsScreen> createState() => _TableBillsScreenState();
 }
 
-class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerProviderStateMixin {
+class _TableBillsScreenState extends State<TableBillsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -70,7 +70,9 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                           ? 'Data berhasil diperbarui dari server online'
                           : 'Server tidak terjangkau. Periksa koneksi atau IP VPS.',
                     ),
-                    backgroundColor: pos.isOnlineSyncAvailable ? AppTheme.accent : AppTheme.danger,
+                    backgroundColor: pos.isOnlineSyncAvailable
+                        ? AppTheme.accent
+                        : AppTheme.danger,
                   ),
                 );
               }
@@ -82,13 +84,15 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
           indicatorColor: AppTheme.primary,
           labelColor: AppTheme.primary,
           unselectedLabelColor: AppTheme.textSecondary,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           tabs: [
             Tab(
               text: 'Tagihan Meja (${pos.liveBills.length})',
             ),
             Tab(
-              text: 'Antrean Masuk (${pos.liveOnlineOrders.where((o) => (o['status'] ?? '') != 'selesai' && (o['status'] ?? '') != 'dibatalkan').length})',
+              text:
+                  'Antrean Masuk (${pos.liveOnlineOrders.where((o) => (o['status'] ?? '') != 'selesai' && (o['status'] ?? '') != 'dibatalkan').length})',
             ),
           ],
         ),
@@ -107,18 +111,25 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                         color: AppTheme.primaryLight,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.cloud_off_outlined, color: AppTheme.primary, size: 32),
+                      child: const Icon(Icons.cloud_off_outlined,
+                          color: AppTheme.primary, size: 32),
                     ),
                     const SizedBox(height: 16),
                     const Text(
                       'Mode Offline Mandiri',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary),
                     ),
                     const SizedBox(height: 8),
                     const Text(
                       'Aplikasi kasir berjalan 100% lokal via SQLite. Hubungkan ke server Angkringan ABS untuk sinkronisasi tagihan meja dan pesanan QR otomatis.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                          height: 1.4),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
@@ -170,7 +181,8 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                 color: AppTheme.primaryLight,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.table_bar, color: AppTheme.primaryDark, size: 20),
+              child: const Icon(Icons.table_bar,
+                  color: AppTheme.primaryDark, size: 20),
             ),
             title: Text(
               'Meja ${bill.nomorMeja}',
@@ -178,7 +190,8 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
             ),
             subtitle: Text(
               '${bill.namaPemesan} • ${bill.jumlahPesanan} Pesanan • Total ${CurrencyFormatter.format(bill.totalTagihan)}',
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
@@ -188,12 +201,17 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Rincian Menu Dipesan:',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary),
                 ),
               ),
               const SizedBox(height: 6),
               ...bill.items.map((it) {
-                final opsiStr = it.opsi != null && it.opsi!.isNotEmpty ? ' (${it.opsi})' : '';
+                final opsiStr = it.opsi != null && it.opsi!.isNotEmpty
+                    ? ' (${it.opsi})'
+                    : '';
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
@@ -202,12 +220,14 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                       Expanded(
                         child: Text(
                           '${it.jumlah}x ${it.nama}$opsiStr',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          style: const TextStyle(
+                              fontSize: 12, color: AppTheme.textSecondary),
                         ),
                       ),
                       Text(
                         CurrencyFormatter.format(it.subtotal),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -226,13 +246,25 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                           'Total tagihan senilai ${CurrencyFormatter.format(bill.totalTagihan)} akan ditandai lunas di web menu-jajan.',
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lunaskan')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Batal')),
+                          ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Lunaskan')),
                         ],
                       ),
                     );
                     if (confirm == true) {
-                      await pos.settleTableBill(bill.nomorMeja);
+                      final settled = await pos.settleTableBill(bill.nomorMeja);
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(settled
+                              ? 'Pelunasan tercatat di riwayat lokal.'
+                              : 'Pelunasan belum berhasil dipastikan. Segarkan tagihan sebelum mencoba lagi.'),
+                        ),
+                      );
                     }
                   },
                   icon: const Icon(Icons.check_circle_outline, size: 18),
@@ -251,7 +283,8 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
       return const EmptyState(
         icon: Icons.receipt_long_outlined,
         title: 'Belum Ada Pesanan Masuk',
-        message: 'Pesanan mandiri dari scan QR pelanggan akan muncul di sini secara real-time.',
+        message:
+            'Pesanan mandiri dari scan QR pelanggan akan muncul di sini secara real-time.',
       );
     }
 
@@ -261,10 +294,14 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
       itemBuilder: (context, index) {
         final order = pos.liveOnlineOrders[index] as Map<String, dynamic>;
         final items = (order['items'] as List<dynamic>?) ?? [];
-        final status = (order['status']?.toString() ?? 'menunggu').toLowerCase();
-        final orderId = order['idPesanan']?.toString() ?? order['id']?.toString() ?? '';
+        final status =
+            (order['status']?.toString() ?? 'menunggu').toLowerCase();
+        final orderId =
+            order['idPesanan']?.toString() ?? order['id']?.toString() ?? '';
         final nomorMeja = order['nomorMeja']?.toString() ?? '-';
-        final namaPemesan = order['namaPemesan']?.toString() ?? order['namaPelanggan']?.toString() ?? 'Pelanggan';
+        final namaPemesan = order['namaPemesan']?.toString() ??
+            order['namaPelanggan']?.toString() ??
+            'Pelanggan';
         final totalHarga = (order['totalHarga'] as num?)?.toDouble() ?? 0.0;
 
         return Container(
@@ -284,26 +321,34 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppTheme.primaryLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           'Meja $nomorMeja',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppTheme.primaryDark),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: AppTheme.primaryDark),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         namaPemesan,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                     ],
                   ),
                   Text(
                     CurrencyFormatter.format(totalHarga),
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.primary),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppTheme.primary),
                   ),
                 ],
               ),
@@ -313,7 +358,8 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                 final opsiStr = opsi != null ? ' ($opsi)' : '';
                 return Text(
                   '• ${it['jumlah']}x ${it['nama']}$opsiStr',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppTheme.textSecondary),
                 );
               }),
               const SizedBox(height: 10),
@@ -322,29 +368,35 @@ class _TableBillsScreenState extends State<TableBillsScreen> with SingleTickerPr
                 children: [
                   if (status == 'menunggu' || status == 'pending') ...[
                     OutlinedButton(
-                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'proses_bakar'),
+                      onPressed: () =>
+                          pos.updateOnlineOrderStatus(orderId, 'proses_bakar'),
                       child: const Text('Terima & Bakar'),
                     ),
                     const SizedBox(width: 8),
                   ],
                   if (status == 'proses_bakar' || status == 'diproses') ...[
                     ElevatedButton(
-                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'siap_saji'),
+                      onPressed: () =>
+                          pos.updateOnlineOrderStatus(orderId, 'siap_saji'),
                       child: const Text('Siap Disajikan'),
                     ),
                     const SizedBox(width: 8),
                   ],
                   if (status == 'siap_saji') ...[
                     ElevatedButton(
-                      onPressed: () => pos.updateOnlineOrderStatus(orderId, 'selesai'),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
+                      onPressed: () =>
+                          pos.updateOnlineOrderStatus(orderId, 'selesai'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success),
                       child: const Text('Selesaikan'),
                     ),
                     const SizedBox(width: 8),
                   ],
                   if (status == 'selesai') ...[
                     const Chip(
-                      label: Text('Selesai Disajikan', style: TextStyle(fontSize: 11, color: AppTheme.success)),
+                      label: Text('Selesai Disajikan',
+                          style:
+                              TextStyle(fontSize: 11, color: AppTheme.success)),
                       backgroundColor: AppTheme.borderSubtle,
                     ),
                   ],

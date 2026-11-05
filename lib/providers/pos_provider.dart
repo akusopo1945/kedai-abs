@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' hide Category;
+
 import '../core/database/database_helper.dart';
 import '../core/services/menu_jajan_api_service.dart';
 import '../models/category.dart';
@@ -9,7 +10,8 @@ import '../models/store_profile.dart';
 
 class PosProvider extends ChangeNotifier {
   DatabaseHelper _db = DatabaseHelper.instance;
-  MenuJajanApiService get _apiService => MenuJajanApiService(baseUrl: _storeProfile.serverUrl);
+  MenuJajanApiService get _apiService =>
+      MenuJajanApiService(baseUrl: _storeProfile.serverUrl);
 
   // Products & Categories
   List<Product> _products = [];
@@ -30,7 +32,11 @@ class PosProvider extends ChangeNotifier {
 
   // Reports & History
   List<OrderModel> _orderHistory = [];
-  Map<String, double> _todaySummary = {'revenue': 0, 'profit': 0, 'transactions': 0};
+  Map<String, double> _todaySummary = {
+    'revenue': 0,
+    'profit': 0,
+    'transactions': 0,
+  };
 
   // Online Sync / menu-jajan integration
   bool _isOnlineSyncAvailable = false;
@@ -59,7 +65,8 @@ class PosProvider extends ChangeNotifier {
   double get cartSubtotal =>
       _cart.values.fold(0.0, (sum, item) => sum + item.subtotal);
 
-  double get cartTotal => (cartSubtotal - _discountAmount).clamp(0.0, double.infinity);
+  double get cartTotal =>
+      (cartSubtotal - _discountAmount).clamp(0.0, double.infinity);
 
   // Initialize
   Future<void> init() async {
@@ -125,7 +132,8 @@ class PosProvider extends ChangeNotifier {
         final badgeKhusus = item['badgeKhusus']?.toString();
 
         List<String> opsiList = [];
-        if (item['opsiConfig'] != null && item['opsiConfig']['daftarPilihan'] is List) {
+        if (item['opsiConfig'] != null &&
+            item['opsiConfig']['daftarPilihan'] is List) {
           opsiList = (item['opsiConfig']['daftarPilihan'] as List)
               .map((e) => e.toString())
               .toList();
@@ -133,7 +141,9 @@ class PosProvider extends ChangeNotifier {
 
         // Match existing product by name
         final existingList = await _db.getProducts(query: nama);
-        final match = existingList.where((p) => p.name.toLowerCase() == nama.toLowerCase()).firstOrNull;
+        final match = existingList
+            .where((p) => p.name.toLowerCase() == nama.toLowerCase())
+            .firstOrNull;
 
         if (match != null) {
           final updated = Product(
@@ -182,11 +192,74 @@ class PosProvider extends ChangeNotifier {
   }
 
   Future<bool> settleTableBill(String meja) async {
+    final normalizedTable = MenuJajanApiService.normalizeMeja(meja);
+    final bill = _liveBills
+        .where(
+          (entry) =>
+              MenuJajanApiService.normalizeMeja(entry.nomorMeja) ==
+              normalizedTable,
+        )
+        .firstOrNull;
     final success = await _apiService.settleBill(meja);
     if (success) {
+      try {
+        if (bill != null) {
+          await _recordSettledOnlineBill(bill);
+        }
+      } catch (_) {
+        await fetchLiveOnlineData();
+        return false;
+      }
       await fetchLiveOnlineData();
     }
     return success;
+  }
+
+  Future<void> _recordSettledOnlineBill(BillSummary bill) async {
+    final table = MenuJajanApiService.normalizeMeja(bill.nomorMeja);
+    final identity = bill.waktuAwal.isNotEmpty
+        ? bill.waktuAwal
+        : '${bill.totalTagihan}-${bill.jumlahPesanan}';
+    final invoice =
+        'QR-$table-${identity.replaceAll(RegExp(r'[^A-Za-z0-9]'), '')}';
+    if (await _db.orderExists(invoice)) return;
+
+    var costKnown = bill.items.isNotEmpty;
+    final items = <OrderItem>[];
+    for (final item in bill.items) {
+      final matches = await _db.getProducts(query: item.nama);
+      final product = matches
+          .where((entry) => entry.name.toLowerCase() == item.nama.toLowerCase())
+          .firstOrNull;
+      if (product == null) costKnown = false;
+      items.add(
+        OrderItem(
+          productId: product?.id ?? 0,
+          productName: item.nama,
+          unitPrice: item.hargaSatuan,
+          buyPrice: product?.buyPrice ?? 0,
+          quantity: item.jumlah,
+          subtotal: item.subtotal,
+          selectedOption: item.opsi,
+        ),
+      );
+    }
+
+    final createdAt = DateTime.tryParse(bill.waktuAwal) ?? DateTime.now();
+    final order = OrderModel(
+      invoiceNumber: invoice,
+      createdAt: createdAt,
+      totalAmount: bill.totalTagihan,
+      finalAmount: bill.totalTagihan,
+      paymentAmount: bill.totalTagihan,
+      changeAmount: 0,
+      paymentMethod: 'tunai',
+      customerName: bill.namaPemesan,
+      tableNumber: 'Meja $table',
+      costKnown: costKnown,
+      items: items,
+    );
+    await _db.insertOrder(order, deductStock: false);
   }
 
   // --- Category Actions ---
@@ -235,13 +308,15 @@ class PosProvider extends ChangeNotifier {
 
     final optionKey = selectedOption ?? '';
     final cartKey = '${product.id}_$optionKey';
+    final productQuantity = _cart.values
+        .where((item) => item.product.id == product.id)
+        .fold<int>(0, (total, item) => total + item.quantity);
 
     if (_cart.containsKey(cartKey)) {
-      final currentQty = _cart[cartKey]!.quantity;
-      if (currentQty < product.stock) {
+      if (productQuantity < product.stock) {
         _cart[cartKey]!.quantity++;
       }
-    } else {
+    } else if (productQuantity < product.stock) {
       _cart[cartKey] = CartItem(
         product: product,
         quantity: 1,
@@ -289,7 +364,8 @@ class PosProvider extends ChangeNotifier {
     if (_cart.isEmpty) return null;
 
     final now = DateTime.now();
-    final invoiceNumber = 'INV-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+    final invoiceNumber =
+        'INV-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
     final targetTable = tableNumber ?? _selectedTable;
 
     final items = _cart.values.map((item) {
@@ -305,7 +381,10 @@ class PosProvider extends ChangeNotifier {
       );
     }).toList();
 
-    final changeAmount = (paymentAmount - cartTotal).clamp(0.0, double.infinity);
+    final changeAmount = (paymentAmount - cartTotal).clamp(
+      0.0,
+      double.infinity,
+    );
 
     final order = OrderModel(
       invoiceNumber: invoiceNumber,
@@ -343,11 +422,6 @@ class PosProvider extends ChangeNotifier {
     await loadProducts();
     await loadTodaySummary();
     await loadOrderHistory();
-
-    // If online sync active and meja settled, notify API
-    if (_isOnlineSyncAvailable && targetTable.isNotEmpty) {
-      settleTableBill(targetTable);
-    }
 
     return createdOrder;
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/pos_provider.dart';
@@ -17,6 +18,8 @@ class ReportsScreen extends StatelessWidget {
     final revenue = summary['revenue'] ?? 0;
     final profit = summary['profit'] ?? 0;
     final count = (summary['transactions'] ?? 0).toInt();
+    final unknownCostCount = (summary['unknown_cost_transactions'] ?? 0)
+        .toInt();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -63,7 +66,9 @@ class ReportsScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: StatBadge(
-                    title: 'Laba Bersih',
+                    title: unknownCostCount == 0
+                        ? 'Laba Bersih'
+                        : 'Laba (HPP tercatat)',
                     value: CurrencyFormatter.format(profit),
                     icon: Icons.trending_up,
                     iconColor: AppTheme.accent,
@@ -80,6 +85,13 @@ class ReportsScreen extends StatelessWidget {
               iconColor: AppTheme.warning,
               backgroundColor: AppTheme.warning.withOpacity(0.12),
             ),
+            if (unknownCostCount > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                '$unknownCostCount transaksi online belum memiliki data modal produk; laba belum mencakup transaksi tersebut.',
+                style: const TextStyle(fontSize: 12, color: AppTheme.warning),
+              ),
+            ],
 
             const SizedBox(height: 24),
 
@@ -97,7 +109,10 @@ class ReportsScreen extends StatelessWidget {
                 ),
                 Text(
                   '${pos.orderHistory.length} Total',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -126,7 +141,10 @@ class ReportsScreen extends StatelessWidget {
                       border: Border.all(color: AppTheme.border),
                     ),
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       title: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -154,16 +172,26 @@ class ReportsScreen extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             '${CurrencyFormatter.formatDate(order.createdAt)} • ${order.paymentMethod}',
-                            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                           if (order.customerName != null)
                             Text(
                               'Pelanggan: ${order.customerName}',
-                              style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.textMuted,
+                              ),
                             ),
                         ],
                       ),
-                      trailing: const Icon(Icons.chevron_right, size: 20, color: AppTheme.textMuted),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        size: 20,
+                        color: AppTheme.textMuted,
+                      ),
                       onTap: () {
                         Navigator.push(
                           context,

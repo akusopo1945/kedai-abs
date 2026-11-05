@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -171,14 +173,31 @@ class ReceiptScreen extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   // Summary Totals
-                  _buildRow('Subtotal', CurrencyFormatter.format(order.totalAmount)),
+                  _buildRow(
+                    'Subtotal',
+                    CurrencyFormatter.format(order.totalAmount),
+                  ),
                   if (order.discountAmount > 0)
-                    _buildRow('Diskon', '-${CurrencyFormatter.format(order.discountAmount)}',
-                        valueColor: AppTheme.danger),
-                  _buildRow('Total', CurrencyFormatter.format(order.finalAmount), isBold: true),
-                  _buildRow('Diterima', CurrencyFormatter.format(order.paymentAmount)),
-                  _buildRow('Kembalian', CurrencyFormatter.format(order.changeAmount),
-                      valueColor: AppTheme.accent, isBold: true),
+                    _buildRow(
+                      'Diskon',
+                      '-${CurrencyFormatter.format(order.discountAmount)}',
+                      valueColor: AppTheme.danger,
+                    ),
+                  _buildRow(
+                    'Total',
+                    CurrencyFormatter.format(order.finalAmount),
+                    isBold: true,
+                  ),
+                  _buildRow(
+                    'Diterima',
+                    CurrencyFormatter.format(order.paymentAmount),
+                  ),
+                  _buildRow(
+                    'Kembalian',
+                    CurrencyFormatter.format(order.changeAmount),
+                    valueColor: AppTheme.accent,
+                    isBold: true,
+                  ),
 
                   const SizedBox(height: 20),
                   _buildDashedLine(),
@@ -206,15 +225,16 @@ class ReceiptScreen extends StatelessWidget {
               height: 48,
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.print_outlined, size: 20),
-                label: const Text('Cetak Struk (Bluetooth ESC/POS)'),
-                onPressed: () {
-                  PrinterService.instance.generateReceiptText(
-                    order: order,
-                    store: store,
-                  );
+                label: const Text('Salin Teks Struk'),
+                onPressed: () async {
+                  final receiptText = PrinterService.instance
+                      .generateReceiptText(order: order, store: store);
+                  await Clipboard.setData(ClipboardData(text: receiptText));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Perintah cetak terkirim ke printer:\n${order.invoiceNumber}'),
+                      content: Text(
+                        'Teks struk disalin:\n${order.invoiceNumber}',
+                      ),
                       backgroundColor: AppTheme.primary,
                       duration: const Duration(seconds: 2),
                     ),
@@ -239,7 +259,12 @@ class ReceiptScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, String value, {bool isBold = false, Color? valueColor}) {
+  Widget _buildRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(

@@ -2,7 +2,7 @@ class AppConstants {
   static const String appName = 'Kedai POS - Angkringan Bersua Sejenak';
   static const String appVersion = '1.1.0';
   static const String dbName = 'kedai_pos_abs.db';
-  static const int dbVersion = 2;
+  static const int dbVersion = 3;
 
   // Default Categories for Angkringan Bersua Sejenak
   static const List<String> defaultCategories = [
@@ -32,12 +32,7 @@ class AppConstants {
   ];
 
   // Quick cash payment chips
-  static const List<int> quickCashDenominations = [
-    10000,
-    20000,
-    50000,
-    100000,
-  ];
+  static const List<int> quickCashDenominations = [10000, 20000, 50000, 100000];
 
   // Default Sync Server URL (menu-jajan PM2 backend on VPS)
   static const String defaultServerUrl = 'http://13.211.188.77:3015';

@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+
 import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/order.dart';
@@ -26,6 +27,7 @@ class DatabaseHelper {
       path,
       version: AppConstants.dbVersion,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -72,7 +74,8 @@ class DatabaseHelper {
         payment_method TEXT NOT NULL,
         customer_name TEXT,
         table_number TEXT,
-        status TEXT NOT NULL DEFAULT 'selesai'
+        status TEXT NOT NULL DEFAULT 'selesai',
+        cost_known INTEGER NOT NULL DEFAULT 1
       )
     ''');
 
@@ -110,6 +113,65 @@ class DatabaseHelper {
     await _seedInitialData(db);
   }
 
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 3) {
+      await _addColumnIfMissing(db, 'products', 'tag_kuliner', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'badge_khusus', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'description', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'opsi_list', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'products',
+        'is_active',
+        'INTEGER NOT NULL DEFAULT 1',
+      );
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'discount_amount',
+        'REAL NOT NULL DEFAULT 0',
+      );
+      await _addColumnIfMissing(db, 'orders', 'table_number', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'status',
+        "TEXT NOT NULL DEFAULT 'selesai'",
+      );
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'cost_known',
+        'INTEGER NOT NULL DEFAULT 1',
+      );
+      await _addColumnIfMissing(db, 'order_items', 'note', 'TEXT');
+      await _addColumnIfMissing(db, 'order_items', 'selected_option', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'store_settings',
+        'paper_width',
+        'INTEGER NOT NULL DEFAULT 58',
+      );
+      await _addColumnIfMissing(
+        db,
+        'store_settings',
+        'server_url',
+        "TEXT NOT NULL DEFAULT '${AppConstants.defaultServerUrl}'",
+      );
+    }
+  }
+
+  Future<void> _addColumnIfMissing(
+    DatabaseExecutor db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((entry) => entry['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+  }
+
   Future<void> _seedInitialData(Database db) async {
     // Seed categories
     for (final cat in AppConstants.defaultCategories) {
@@ -130,7 +192,11 @@ class DatabaseHelper {
         tagKuliner: 'Arang Batok',
         badgeKhusus: 'Favorit Meja',
         description: 'Kulit ayam pilihan ungkep bumbu kuning, kenyal gurih dengan karamelisasi manis pedas di atas arang batok.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Usus Bacem',
@@ -142,7 +208,11 @@ class DatabaseHelper {
         tagKuliner: 'Bumbu Bacem',
         badgeKhusus: 'Paling Laris',
         description: 'Usus ayam bersih dibacem gula kelapa asli, gurih legit harum daun salam.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Telur Puyuh Karamel',
@@ -164,7 +234,11 @@ class DatabaseHelper {
         stock: 30,
         tagKuliner: 'Rempah Ungkep',
         description: 'Potongan hati dan ampela ayam empuk kaya rempah ketumbar dan lengkuas.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Bakso Sapi Urat',
@@ -175,7 +249,11 @@ class DatabaseHelper {
         stock: 45,
         tagKuliner: 'Saus Olesan',
         description: 'Bakso daging urat sapi gurih dioles racikan saus bakar barbeque pedas manis.',
-        opsiList: ['Bakar Pedas Membara', 'Bakar Manis Gurih', 'Langsung Makan'],
+        opsiList: [
+          'Bakar Pedas Membara',
+          'Bakar Manis Gurih',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sego Kucing Sambal Teri',
@@ -368,7 +446,7 @@ class DatabaseHelper {
   }
 
   // --- Orders & Transactions ---
-  Future<int> insertOrder(OrderModel order) async {
+  Future<int> insertOrder(OrderModel order, {bool deductStock = true}) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
       // 1. Insert order
@@ -376,24 +454,41 @@ class DatabaseHelper {
 
       // 2. Insert items & deduct stock
       for (final item in order.items) {
-        await txn.insert('order_items', {
-          ...item.toMap(),
-          'order_id': orderId,
-        });
+        await txn.insert('order_items', {...item.toMap(), 'order_id': orderId});
 
         // Deduct product stock
-        await txn.rawUpdate('''
-          UPDATE products 
-          SET stock = MAX(0, stock - ?) 
-          WHERE id = ?
-        ''', [item.quantity, item.productId]);
+        if (deductStock) {
+          await txn.rawUpdate(
+            '''
+            UPDATE products
+            SET stock = MAX(0, stock - ?)
+            WHERE id = ?
+          ''',
+            [item.quantity, item.productId],
+          );
+        }
       }
 
       return orderId;
     });
   }
 
-  Future<List<OrderModel>> getOrders({DateTime? startDate, DateTime? endDate}) async {
+  Future<bool> orderExists(String invoiceNumber) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'orders',
+      columns: ['id'],
+      where: 'invoice_number = ?',
+      whereArgs: [invoiceNumber],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<List<OrderModel>> getOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final db = await instance.database;
     String? whereClause;
     List<dynamic>? whereArgs;
@@ -433,6 +528,7 @@ class DatabaseHelper {
 
     for (final order in orders) {
       totalRevenue += order.finalAmount;
+      if (!order.costKnown) continue;
       for (final item in order.items) {
         totalCost += (item.buyPrice * item.quantity);
       }
@@ -444,6 +540,10 @@ class DatabaseHelper {
       'revenue': totalRevenue,
       'profit': totalProfit,
       'transactions': orders.length.toDouble(),
+      'unknown_cost_transactions': orders
+          .where((order) => !order.costKnown)
+          .length
+          .toDouble(),
     };
   }
 
@@ -459,10 +559,6 @@ class DatabaseHelper {
 
   Future<int> saveStoreProfile(StoreProfile profile) async {
     final db = await instance.database;
-    return await db.update(
-      'store_settings',
-      profile.toMap(),
-      where: 'id = 1',
-    );
+    return await db.update('store_settings', profile.toMap(), where: 'id = 1');
   }
 }
