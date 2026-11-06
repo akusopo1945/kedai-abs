@@ -2,7 +2,7 @@ class AppConstants {
   static const String appName = 'Kedai POS - Angkringan Bersua Sejenak';
   static const String appVersion = '1.1.0';
   static const String dbName = 'kedai_pos_abs.db';
-  static const int dbVersion = 3;
+  static const int dbVersion = 4;
 
   // Default Categories for Angkringan Bersua Sejenak
   static const List<String> defaultCategories = [

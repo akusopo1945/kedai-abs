@@ -35,7 +35,8 @@ class PosScreen extends StatelessWidget {
                 if (pos.isOnlineSyncAvailable) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppTheme.success.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
@@ -47,7 +48,10 @@ class PosScreen extends StatelessWidget {
                         SizedBox(width: 3),
                         Text(
                           'Online Sync',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.success),
+                          style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.success),
                         ),
                       ],
                     ),
@@ -68,7 +72,8 @@ class PosScreen extends StatelessWidget {
         actions: [
           if (pos.cartCount > 0)
             IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined, color: AppTheme.danger),
+              icon: const Icon(Icons.delete_sweep_outlined,
+                  color: AppTheme.danger),
               tooltip: 'Kosongkan Keranjang',
               onPressed: () {
                 _showClearCartDialog(context, pos);
@@ -84,11 +89,15 @@ class PosScreen extends StatelessWidget {
             color: AppTheme.surface,
             child: Row(
               children: [
-                const Icon(Icons.table_restaurant_outlined, size: 20, color: AppTheme.primary),
+                const Icon(Icons.table_restaurant_outlined,
+                    size: 20, color: AppTheme.primary),
                 const SizedBox(width: 8),
                 const Text(
                   'Pesanan Meja:',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -97,22 +106,31 @@ class PosScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.primaryLight,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                      border:
+                          Border.all(color: AppTheme.primary.withOpacity(0.3)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: pos.selectedTable,
                         isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.primaryDark),
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: AppTheme.primaryDark),
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.primaryDark,
                         ),
                         items: AppConstants.defaultTables.map((t) {
+                          final heldCount = pos.heldTableOrders[t]?.fold<int>(
+                                0,
+                                (sum, item) => sum + item.quantity,
+                              ) ??
+                              0;
                           return DropdownMenuItem<String>(
                             value: t,
-                            child: Text(t),
+                            child: Text(
+                              heldCount > 0 ? '$t ($heldCount disimpan)' : t,
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -122,6 +140,32 @@ class PosScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (pos.heldTableOrders.containsKey(pos.selectedTable)) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () {
+                      final table = pos.selectedTable;
+                      pos.resumeHeldTableOrder(table);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('Tagihan $table dimuat kembali ke kasir.'),
+                          backgroundColor: AppTheme.primary,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.restore_page_outlined, size: 16),
+                    label:
+                        const Text('Buka Bill', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primaryDark,
+                      backgroundColor: AppTheme.primaryLight,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -134,7 +178,8 @@ class PosScreen extends StatelessWidget {
               onChanged: pos.setSearchQuery,
               decoration: InputDecoration(
                 hintText: 'Cari menu (sate, kopi joss, sego kucing)...',
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppTheme.textMuted),
+                prefixIcon: const Icon(Icons.search,
+                    size: 20, color: AppTheme.textMuted),
                 suffixIcon: pos.searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
@@ -192,11 +237,13 @@ class PosScreen extends StatelessWidget {
                     ? const EmptyState(
                         icon: Icons.inventory_2_outlined,
                         title: 'Tidak Ada Produk',
-                        message: 'Belum ada produk untuk kategori ini atau kata kunci yang dicari.',
+                        message:
+                            'Belum ada produk untuk kategori ini atau kata kunci yang dicari.',
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
@@ -205,14 +252,16 @@ class PosScreen extends StatelessWidget {
                         itemCount: pos.products.length,
                         itemBuilder: (context, index) {
                           final product = pos.products[index];
-                          final cartQty = pos.cartItems
-                              .where((ci) => ci.product.id == product.id)
-                              .fold(0, (sum, ci) => sum + ci.quantity);
 
-                          return ProductCard(
-                            product: product,
-                            cartQuantity: cartQty,
-                            onAdd: () => _handleProductTap(context, pos, product),
+                          return Selector<PosProvider, int>(
+                            selector: (_, p) =>
+                                p.getProductCartQuantity(product.id),
+                            builder: (context, cartQty, _) => ProductCard(
+                              product: product,
+                              cartQuantity: cartQty,
+                              onAdd: () =>
+                                  _handleProductTap(context, pos, product),
+                            ),
                           );
                         },
                       ),
@@ -243,7 +292,8 @@ class PosScreen extends StatelessWidget {
                       onTap: () => _showCartDetails(context, pos),
                       borderRadius: BorderRadius.circular(10),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
                         child: Row(
                           children: [
                             Badge(
@@ -295,6 +345,44 @@ class PosScreen extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
+                    // Hold / Save Open Bill Button
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final table = pos.selectedTable;
+                        final ok = pos.holdCurrentCartToTable(table);
+                        if (ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Pesanan disimpan ke $table (Open Bill).',
+                              ),
+                              backgroundColor: AppTheme.primaryDark,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                      label: const Text(
+                        'Simpan',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryDark,
+                        side: const BorderSide(color: AppTheme.primary),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     // Checkout Button
                     ElevatedButton(
                       onPressed: () {
@@ -305,7 +393,8 @@ class PosScreen extends StatelessWidget {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -333,7 +422,8 @@ class PosScreen extends StatelessWidget {
     );
   }
 
-  void _handleProductTap(BuildContext context, PosProvider pos, Product product) {
+  void _handleProductTap(
+      BuildContext context, PosProvider pos, Product product) {
     if (product.hasOptions) {
       _showOptionPickerModal(context, pos, product);
     } else {
@@ -341,7 +431,8 @@ class PosScreen extends StatelessWidget {
     }
   }
 
-  void _showOptionPickerModal(BuildContext context, PosProvider pos, Product product) {
+  void _showOptionPickerModal(
+      BuildContext context, PosProvider pos, Product product) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -359,7 +450,10 @@ class PosScreen extends StatelessWidget {
                 children: [
                   Text(
                     product.name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -382,8 +476,11 @@ class PosScreen extends StatelessWidget {
                       side: const BorderSide(color: AppTheme.border),
                     ),
                     tileColor: AppTheme.surface,
-                    title: Text(opt, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    trailing: const Icon(Icons.add_circle, color: AppTheme.primary),
+                    title: Text(opt,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14)),
+                    trailing:
+                        const Icon(Icons.add_circle, color: AppTheme.primary),
                     onTap: () {
                       pos.addToCart(product, selectedOption: opt);
                       Navigator.pop(ctx);
@@ -425,7 +522,8 @@ class PosScreen extends StatelessWidget {
                       pos.clearCart();
                       Navigator.pop(context);
                     },
-                    child: const Text('Hapus Semua', style: TextStyle(color: AppTheme.danger)),
+                    child: const Text('Hapus Semua',
+                        style: TextStyle(color: AppTheme.danger)),
                   ),
                 ],
               ),
@@ -433,7 +531,8 @@ class PosScreen extends StatelessWidget {
               Expanded(
                 child: ListView.separated(
                   itemCount: pos.cart.length,
-                  separatorBuilder: (_, __) => const Divider(color: AppTheme.borderSubtle),
+                  separatorBuilder: (_, __) =>
+                      const Divider(color: AppTheme.borderSubtle),
                   itemBuilder: (context, index) {
                     final key = pos.cart.keys.elementAt(index);
                     final item = pos.cart[key]!;
@@ -442,7 +541,8 @@ class PosScreen extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       title: Text(
                         item.product.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14),
                       ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,7 +550,8 @@ class PosScreen extends StatelessWidget {
                           if (item.selectedOption != null)
                             Container(
                               margin: const EdgeInsets.only(top: 2, bottom: 2),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
                                 color: AppTheme.primaryLight,
                                 borderRadius: BorderRadius.circular(4),
@@ -464,23 +565,28 @@ class PosScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          Text(CurrencyFormatter.format(item.product.sellPrice)),
+                          Text(
+                              CurrencyFormatter.format(item.product.sellPrice)),
                         ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, size: 20),
+                            icon: const Icon(Icons.remove_circle_outline,
+                                size: 20),
                             onPressed: () => pos.decreaseQuantity(key),
                           ),
                           Text(
                             '${item.quantity}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.add_circle_outline, size: 20, color: AppTheme.primary),
-                            onPressed: () => pos.addToCart(item.product, selectedOption: item.selectedOption),
+                            icon: const Icon(Icons.add_circle_outline,
+                                size: 20, color: AppTheme.primary),
+                            onPressed: () => pos.addToCart(item.product,
+                                selectedOption: item.selectedOption),
                           ),
                         ],
                       ),

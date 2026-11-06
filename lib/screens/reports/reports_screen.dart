@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -14,18 +15,38 @@ class ReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pos = context.watch<PosProvider>();
-    final summary = pos.todaySummary;
+    final summary = pos.filteredSummary;
+    final orders = pos.filteredOrders;
     final revenue = summary['revenue'] ?? 0;
     final profit = summary['profit'] ?? 0;
     final count = (summary['transactions'] ?? 0).toInt();
-    final unknownCostCount = (summary['unknown_cost_transactions'] ?? 0)
-        .toInt();
+    final unknownCostCount =
+        (summary['unknown_cost_transactions'] ?? 0).toInt();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Laporan & Riwayat Penjualan'),
         actions: [
+          if (orders.isNotEmpty)
+            IconButton(
+              icon:
+                  const Icon(Icons.download_outlined, color: AppTheme.primary),
+              tooltip: 'Salin Rekap CSV',
+              onPressed: () async {
+                final csv = pos.generateOrdersCsv();
+                await Clipboard.setData(ClipboardData(text: csv));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Rekap CSV (${orders.length} transaksi) disalin ke clipboard.',
+                    ),
+                    backgroundColor: AppTheme.primary,
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh, color: AppTheme.primary),
             onPressed: () {
@@ -40,9 +61,26 @@ class ReportsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Date Range Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildRangeChip(pos, 'today', 'Hari Ini'),
+                  const SizedBox(width: 8),
+                  _buildRangeChip(pos, '7d', '7 Hari Terakhir'),
+                  const SizedBox(width: 8),
+                  _buildRangeChip(pos, 'month', 'Bulan Ini'),
+                  const SizedBox(width: 8),
+                  _buildRangeChip(pos, 'all', 'Semua Waktu'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Section Title
             const Text(
-              'Ringkasan Hari Ini',
+              'Ringkasan Penjualan',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -108,7 +146,7 @@ class ReportsScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${pos.orderHistory.length} Total',
+                  '${orders.length} Total',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
@@ -119,20 +157,21 @@ class ReportsScreen extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Order History List
-            if (pos.orderHistory.isEmpty)
+            if (orders.isEmpty)
               const EmptyState(
                 icon: Icons.history_toggle_off,
                 title: 'Belum Ada Transaksi',
-                message: 'Transaksi kasir yang telah diselesaikan akan tercatat di sini.',
+                message:
+                    'Transaksi kasir yang telah diselesaikan akan tercatat di sini.',
               )
             else
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: pos.orderHistory.length,
+                itemCount: orders.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
-                  final order = pos.orderHistory[index];
+                  final order = orders[index];
 
                   return Container(
                     decoration: BoxDecoration(
@@ -207,6 +246,26 @@ class ReportsScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildRangeChip(PosProvider pos, String key, String label) {
+    final isSelected = pos.reportRange == key;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => pos.setReportRange(key),
+      selectedColor: AppTheme.primary,
+      backgroundColor: AppTheme.surface,
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+        color: isSelected ? Colors.white : AppTheme.textSecondary,
+      ),
+      side: BorderSide(
+        color: isSelected ? AppTheme.primary : AppTheme.border,
+      ),
+      showCheckmark: false,
     );
   }
 }

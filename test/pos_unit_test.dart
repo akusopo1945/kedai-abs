@@ -22,6 +22,34 @@ void main() {
       expect(product.profit, 10000);
       expect(product.profitMargin, closeTo(55.55, 0.01));
     });
+    test('Hold and resume local table Open Bill preserves cart items', () {
+      final provider = PosProvider();
+      final product = Product(
+        id: 11,
+        name: 'Sate Usus Bakar',
+        category: 'Sate-satean',
+        buyPrice: 1500,
+        sellPrice: 3000,
+        stock: 10,
+      );
+
+      provider.setSelectedTable('Meja 03');
+      provider.addToCart(product, selectedOption: 'Pedas');
+      provider.addToCart(product, selectedOption: 'Pedas');
+      expect(provider.cartCount, 2);
+
+      final held = provider.holdCurrentCartToTable();
+      expect(held, isTrue);
+      expect(provider.cartCount, 0);
+      expect(provider.heldTableOrders.containsKey('Meja 03'), isTrue);
+
+      provider.resumeHeldTableOrder('Meja 03');
+      expect(provider.selectedTable, 'Meja 03');
+      expect(provider.cartCount, 2);
+      expect(provider.getProductCartQuantity(11), 2);
+      expect(provider.heldTableOrders.containsKey('Meja 03'), isFalse);
+      provider.dispose();
+    });
   });
 
   group('CartItem Model Tests', () {

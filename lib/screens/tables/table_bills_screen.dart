@@ -88,7 +88,8 @@ class _TableBillsScreenState extends State<TableBillsScreen>
               const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           tabs: [
             Tab(
-              text: 'Tagihan Meja (${pos.liveBills.length})',
+              text:
+                  'Tagihan Meja (${pos.heldTableOrders.length + pos.liveBills.length})',
             ),
             Tab(
               text:
@@ -97,7 +98,7 @@ class _TableBillsScreenState extends State<TableBillsScreen>
           ],
         ),
       ),
-      body: !pos.isOnlineSyncAvailable
+      body: (!pos.isOnlineSyncAvailable && pos.heldTableOrders.isEmpty)
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -152,7 +153,7 @@ class _TableBillsScreenState extends State<TableBillsScreen>
   }
 
   Widget _buildTableBillsTab(PosProvider pos) {
-    if (pos.liveBills.isEmpty) {
+    if (pos.liveBills.isEmpty && pos.heldTableOrders.isEmpty) {
       return const EmptyState(
         icon: Icons.table_restaurant_outlined,
         title: 'Tidak Ada Tagihan Terbuka',
@@ -160,11 +161,134 @@ class _TableBillsScreenState extends State<TableBillsScreen>
       );
     }
 
+    final heldEntries = pos.heldTableOrders.entries.toList();
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: pos.liveBills.length,
+      itemCount: heldEntries.length + pos.liveBills.length,
       itemBuilder: (context, index) {
-        final bill = pos.liveBills[index];
+        if (index < heldEntries.length) {
+          final entry = heldEntries[index];
+          final tableName = entry.key;
+          final items = entry.value;
+          final totalAmount = items.fold<double>(
+            0,
+            (sum, it) => sum + it.subtotal,
+          );
+          final totalItems = items.fold<int>(
+            0,
+            (sum, it) => sum + it.quantity,
+          );
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.primary),
+            ),
+            child: ExpansionTile(
+              shape: const Border(),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.bookmark_added_outlined,
+                  color: AppTheme.primaryDark,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                '$tableName • Open Bill Kasir',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+              subtitle: Text(
+                '$totalItems Item • Total ${CurrencyFormatter.format(totalAmount)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                const Divider(color: AppTheme.borderSubtle),
+                ...items.map((it) {
+                  final opt =
+                      it.selectedOption != null && it.selectedOption!.isNotEmpty
+                          ? ' (${it.selectedOption})'
+                          : '';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${it.quantity}x ${it.product.name}$opt',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(it.subtotal),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => pos.deleteHeldTableOrder(tableName),
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        label: const Text('Hapus'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.danger,
+                          side: const BorderSide(color: AppTheme.danger),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          pos.resumeHeldTableOrder(tableName);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Tagihan $tableName dimuat ke tab Kasir.',
+                              ),
+                              backgroundColor: AppTheme.primary,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.point_of_sale, size: 16),
+                        label: const Text('Muat ke Kasir'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
+
+        final bill = pos.liveBills[index - heldEntries.length];
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),

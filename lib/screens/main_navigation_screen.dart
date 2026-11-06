@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../providers/pos_provider.dart';
 import 'pos/pos_screen.dart';
 import 'tables/table_bills_screen.dart';
 import 'products/product_management_screen.dart';
@@ -26,6 +28,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final alertCount = context.select<PosProvider, int>(
+      (pos) => pos.activeAlertCount,
+    );
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -42,28 +48,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           backgroundColor: AppTheme.surface,
           indicatorColor: AppTheme.primaryLight,
           elevation: 0,
-          destinations: const [
-            NavigationDestination(
+          destinations: [
+            const NavigationDestination(
               icon: Icon(Icons.point_of_sale_outlined),
               selectedIcon: Icon(Icons.point_of_sale, color: AppTheme.primary),
               label: 'Kasir',
             ),
             NavigationDestination(
-              icon: Icon(Icons.table_restaurant_outlined),
-              selectedIcon: Icon(Icons.table_restaurant, color: AppTheme.primary),
+              icon: Badge(
+                isLabelVisible: alertCount > 0,
+                label: Text('$alertCount'),
+                backgroundColor: AppTheme.primary,
+                child: const Icon(Icons.table_restaurant_outlined),
+              ),
+              selectedIcon: Badge(
+                isLabelVisible: alertCount > 0,
+                label: Text('$alertCount'),
+                backgroundColor: AppTheme.primaryDark,
+                child:
+                    const Icon(Icons.table_restaurant, color: AppTheme.primary),
+              ),
               label: 'Meja & Online',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2, color: AppTheme.primary),
               label: 'Produk',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.analytics_outlined),
               selectedIcon: Icon(Icons.analytics, color: AppTheme.primary),
               label: 'Laporan',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.storefront_outlined),
               selectedIcon: Icon(Icons.storefront, color: AppTheme.primary),
               label: 'Pengaturan',
