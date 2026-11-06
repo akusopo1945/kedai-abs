@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+
 import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/order.dart';
@@ -26,6 +27,7 @@ class DatabaseHelper {
       path,
       version: AppConstants.dbVersion,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -72,7 +74,8 @@ class DatabaseHelper {
         payment_method TEXT NOT NULL,
         customer_name TEXT,
         table_number TEXT,
-        status TEXT NOT NULL DEFAULT 'selesai'
+        status TEXT NOT NULL DEFAULT 'selesai',
+        cost_known INTEGER NOT NULL DEFAULT 1
       )
     ''');
 
@@ -108,6 +111,81 @@ class DatabaseHelper {
 
     // Seed default data
     await _seedInitialData(db);
+    await _createIndexes(db);
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 3) {
+      await _addColumnIfMissing(db, 'products', 'tag_kuliner', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'badge_khusus', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'description', 'TEXT');
+      await _addColumnIfMissing(db, 'products', 'opsi_list', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'products',
+        'is_active',
+        'INTEGER NOT NULL DEFAULT 1',
+      );
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'discount_amount',
+        'REAL NOT NULL DEFAULT 0',
+      );
+      await _addColumnIfMissing(db, 'orders', 'table_number', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'status',
+        "TEXT NOT NULL DEFAULT 'selesai'",
+      );
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'cost_known',
+        'INTEGER NOT NULL DEFAULT 1',
+      );
+      await _addColumnIfMissing(db, 'order_items', 'note', 'TEXT');
+      await _addColumnIfMissing(db, 'order_items', 'selected_option', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'store_settings',
+        'paper_width',
+        'INTEGER NOT NULL DEFAULT 58',
+      );
+      await _addColumnIfMissing(
+        db,
+        'store_settings',
+        'server_url',
+        "TEXT NOT NULL DEFAULT '${AppConstants.defaultServerUrl}'",
+      );
+    }
+    if (oldVersion < 4) {
+      await _createIndexes(db);
+    }
+  }
+
+  Future<void> _createIndexes(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_products_active_cat ON products (is_active, category)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders (created_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id)',
+    );
+  }
+
+  Future<void> _addColumnIfMissing(
+    DatabaseExecutor db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((entry) => entry['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   Future<void> _seedInitialData(Database db) async {
@@ -129,8 +207,13 @@ class DatabaseHelper {
         stock: 50,
         tagKuliner: 'Arang Batok',
         badgeKhusus: 'Favorit Meja',
-        description: 'Kulit ayam pilihan ungkep bumbu kuning, kenyal gurih dengan karamelisasi manis pedas di atas arang batok.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        description:
+            'Kulit ayam pilihan ungkep bumbu kuning, kenyal gurih dengan karamelisasi manis pedas di atas arang batok.',
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Usus Bacem',
@@ -141,8 +224,13 @@ class DatabaseHelper {
         stock: 40,
         tagKuliner: 'Bumbu Bacem',
         badgeKhusus: 'Paling Laris',
-        description: 'Usus ayam bersih dibacem gula kelapa asli, gurih legit harum daun salam.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        description:
+            'Usus ayam bersih dibacem gula kelapa asli, gurih legit harum daun salam.',
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Telur Puyuh Karamel',
@@ -152,7 +240,8 @@ class DatabaseHelper {
         sellPrice: 4000,
         stock: 35,
         tagKuliner: 'Resep Lawas',
-        description: '4 butir telur puyuh utuh baceman medok pekat kecap kedelai hitam tradisional.',
+        description:
+            '4 butir telur puyuh utuh baceman medok pekat kecap kedelai hitam tradisional.',
         opsiList: ['Bakar Manis Gurih', 'Langsung Makan'],
       ),
       Product(
@@ -163,8 +252,13 @@ class DatabaseHelper {
         sellPrice: 4000,
         stock: 30,
         tagKuliner: 'Rempah Ungkep',
-        description: 'Potongan hati dan ampela ayam empuk kaya rempah ketumbar dan lengkuas.',
-        opsiList: ['Bakar Manis Gurih', 'Bakar Pedas Membara', 'Langsung Makan'],
+        description:
+            'Potongan hati dan ampela ayam empuk kaya rempah ketumbar dan lengkuas.',
+        opsiList: [
+          'Bakar Manis Gurih',
+          'Bakar Pedas Membara',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sate Bakso Sapi Urat',
@@ -174,8 +268,13 @@ class DatabaseHelper {
         sellPrice: 3500,
         stock: 45,
         tagKuliner: 'Saus Olesan',
-        description: 'Bakso daging urat sapi gurih dioles racikan saus bakar barbeque pedas manis.',
-        opsiList: ['Bakar Pedas Membara', 'Bakar Manis Gurih', 'Langsung Makan'],
+        description:
+            'Bakso daging urat sapi gurih dioles racikan saus bakar barbeque pedas manis.',
+        opsiList: [
+          'Bakar Pedas Membara',
+          'Bakar Manis Gurih',
+          'Langsung Makan',
+        ],
       ),
       Product(
         name: 'Sego Kucing Sambal Teri',
@@ -186,7 +285,8 @@ class DatabaseHelper {
         stock: 60,
         tagKuliner: 'Daun Pisang',
         badgeKhusus: 'Ikonik',
-        description: 'Bungkusan daun pisang wangi berisi nasi pulen hangat dan sambal teri lombok ijo pedas nampol.',
+        description:
+            'Bungkusan daun pisang wangi berisi nasi pulen hangat dan sambal teri lombok ijo pedas nampol.',
         opsiList: ['Langsung Santap', 'Bakar Hangat'],
       ),
       Product(
@@ -197,7 +297,8 @@ class DatabaseHelper {
         sellPrice: 3500,
         stock: 50,
         tagKuliner: 'Khas Djogja',
-        description: 'Nasi bungkus klasik dengan tumisan tempe orek manis legit bertabur bawang goreng renyah.',
+        description:
+            'Nasi bungkus klasik dengan tumisan tempe orek manis legit bertabur bawang goreng renyah.',
         opsiList: ['Langsung Santap', 'Bakar Hangat'],
       ),
       Product(
@@ -209,7 +310,8 @@ class DatabaseHelper {
         stock: 25,
         tagKuliner: 'Bakar Arang',
         badgeKhusus: 'Spesial',
-        description: 'Nasi gurih santan rempah dengan isian ayam suwir bumbu rica pedas dan daun kemangi harum semerbak.',
+        description:
+            'Nasi gurih santan rempah dengan isian ayam suwir bumbu rica pedas dan daun kemangi harum semerbak.',
       ),
       Product(
         name: 'Tempe Mendoan Anget (Porsi 2)',
@@ -220,7 +322,8 @@ class DatabaseHelper {
         stock: 40,
         tagKuliner: 'Kecap Rawit',
         badgeKhusus: 'Goreng Dadakan',
-        description: 'Tempe lebar tepung basah berbumbu daun bawang kucai, disajikan dengan kecap rawit kental.',
+        description:
+            'Tempe lebar tepung basah berbumbu daun bawang kucai, disajikan dengan kecap rawit kental.',
         opsiList: ['Hangatkan / Bakar', 'Langsung Santap'],
       ),
       Product(
@@ -231,7 +334,8 @@ class DatabaseHelper {
         sellPrice: 2000,
         stock: 50,
         tagKuliner: 'Renyah Gurih',
-        description: 'Adonan sayur kubis, wortel, dan tauge garing di luar lembut di dalam.',
+        description:
+            'Adonan sayur kubis, wortel, dan tauge garing di luar lembut di dalam.',
       ),
       Product(
         name: 'Kopi Joss Arang Membara',
@@ -242,7 +346,8 @@ class DatabaseHelper {
         stock: 50,
         tagKuliner: 'Arang Merah',
         badgeKhusus: 'Legenda',
-        description: 'Kopi tubruk robusta pekat yang dicelup potongan arang kayu mendidih berdesis. Rendah asam lambung.',
+        description:
+            'Kopi tubruk robusta pekat yang dicelup potongan arang kayu mendidih berdesis. Rendah asam lambung.',
         opsiList: ['Panas Berdesis', 'Hangat'],
       ),
       Product(
@@ -254,7 +359,8 @@ class DatabaseHelper {
         stock: 45,
         tagKuliner: 'Jahe Merah',
         badgeKhusus: 'Penghangat',
-        description: 'Geprekan jahe merah bakar aromatik diseduh air gula kelapa dan susu kental manis pekat.',
+        description:
+            'Geprekan jahe merah bakar aromatik diseduh air gula kelapa dan susu kental manis pekat.',
         opsiList: ['Panas', 'Hangat'],
       ),
       Product(
@@ -265,7 +371,8 @@ class DatabaseHelper {
         sellPrice: 6000,
         stock: 40,
         tagKuliner: 'Rempah Kraton',
-        description: 'Seduhan rempah secang merah, cengkeh, kayu manis, pala, dan gula batu kristal asli Imogiri.',
+        description:
+            'Seduhan rempah secang merah, cengkeh, kayu manis, pala, dan gula batu kristal asli Imogiri.',
         opsiList: ['Panas Rempah', 'Hangat'],
       ),
       Product(
@@ -277,7 +384,8 @@ class DatabaseHelper {
         stock: 100,
         tagKuliner: 'Ginastel Solo',
         badgeKhusus: 'Wajib Coba',
-        description: 'Racikan 3 merk teh Jawa legendaris: Legi, Kentel, Sepet, dengan wangi melati alami.',
+        description:
+            'Racikan 3 merk teh Jawa legendaris: Legi, Kentel, Sepet, dengan wangi melati alami.',
         opsiList: ['Es Dingin Segar', 'Hangat'],
       ),
       Product(
@@ -288,7 +396,8 @@ class DatabaseHelper {
         sellPrice: 5000,
         stock: 50,
         tagKuliner: '100% Jeruk Asli',
-        description: 'Jeruk peras murni asam manis segar dengan tetesan gula tebu murni.',
+        description:
+            'Jeruk peras murni asam manis segar dengan tetesan gula tebu murni.',
         opsiList: ['Es Dingin Segar', 'Hangat'],
       ),
     ];
@@ -368,7 +477,7 @@ class DatabaseHelper {
   }
 
   // --- Orders & Transactions ---
-  Future<int> insertOrder(OrderModel order) async {
+  Future<int> insertOrder(OrderModel order, {bool deductStock = true}) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
       // 1. Insert order
@@ -376,24 +485,41 @@ class DatabaseHelper {
 
       // 2. Insert items & deduct stock
       for (final item in order.items) {
-        await txn.insert('order_items', {
-          ...item.toMap(),
-          'order_id': orderId,
-        });
+        await txn.insert('order_items', {...item.toMap(), 'order_id': orderId});
 
         // Deduct product stock
-        await txn.rawUpdate('''
-          UPDATE products 
-          SET stock = MAX(0, stock - ?) 
-          WHERE id = ?
-        ''', [item.quantity, item.productId]);
+        if (deductStock) {
+          await txn.rawUpdate(
+            '''
+            UPDATE products
+            SET stock = MAX(0, stock - ?)
+            WHERE id = ?
+          ''',
+            [item.quantity, item.productId],
+          );
+        }
       }
 
       return orderId;
     });
   }
 
-  Future<List<OrderModel>> getOrders({DateTime? startDate, DateTime? endDate}) async {
+  Future<bool> orderExists(String invoiceNumber) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'orders',
+      columns: ['id'],
+      where: 'invoice_number = ?',
+      whereArgs: [invoiceNumber],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<List<OrderModel>> getOrders({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final db = await instance.database;
     String? whereClause;
     List<dynamic>? whereArgs;
@@ -410,19 +536,32 @@ class DatabaseHelper {
       orderBy: 'created_at DESC',
     );
 
-    List<OrderModel> orders = [];
-    for (final row in orderRows) {
-      final orderId = row['id'] as int;
-      final itemRows = await db.query(
-        'order_items',
-        where: 'order_id = ?',
-        whereArgs: [orderId],
-      );
-      final items = itemRows.map((e) => OrderItem.fromMap(e)).toList();
-      orders.add(OrderModel.fromMap(row, items: items));
+    if (orderRows.isEmpty) return [];
+
+    final orderIds = orderRows.map((r) => r['id'] as int).toList();
+    final placeholders = List.filled(orderIds.length, '?').join(',');
+    final allItemRows = await db.query(
+      'order_items',
+      where: 'order_id IN ($placeholders)',
+      whereArgs: orderIds,
+    );
+
+    final itemsByOrderId = <int, List<OrderItem>>{};
+    for (final itemRow in allItemRows) {
+      final item = OrderItem.fromMap(itemRow);
+      final oid = item.orderId;
+      if (oid != null) {
+        (itemsByOrderId[oid] ??= []).add(item);
+      }
     }
 
-    return orders;
+    return orderRows.map((row) {
+      final orderId = row['id'] as int;
+      return OrderModel.fromMap(
+        row,
+        items: itemsByOrderId[orderId] ?? const [],
+      );
+    }).toList();
   }
 
   Future<Map<String, double>> getSummary(DateTime start, DateTime end) async {
@@ -433,6 +572,7 @@ class DatabaseHelper {
 
     for (final order in orders) {
       totalRevenue += order.finalAmount;
+      if (!order.costKnown) continue;
       for (final item in order.items) {
         totalCost += (item.buyPrice * item.quantity);
       }
@@ -444,6 +584,8 @@ class DatabaseHelper {
       'revenue': totalRevenue,
       'profit': totalProfit,
       'transactions': orders.length.toDouble(),
+      'unknown_cost_transactions':
+          orders.where((order) => !order.costKnown).length.toDouble(),
     };
   }
 
@@ -459,10 +601,6 @@ class DatabaseHelper {
 
   Future<int> saveStoreProfile(StoreProfile profile) async {
     final db = await instance.database;
-    return await db.update(
-      'store_settings',
-      profile.toMap(),
-      where: 'id = 1',
-    );
+    return await db.update('store_settings', profile.toMap(), where: 'id = 1');
   }
 }

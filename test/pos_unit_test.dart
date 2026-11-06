@@ -6,6 +6,7 @@ import 'package:kedai_abs/models/cart_item.dart';
 import 'package:kedai_abs/models/order.dart';
 import 'package:kedai_abs/models/product.dart';
 import 'package:kedai_abs/models/store_profile.dart';
+import 'package:kedai_abs/providers/pos_provider.dart';
 
 void main() {
   group('Product Model Tests', () {
@@ -20,6 +21,34 @@ void main() {
 
       expect(product.profit, 10000);
       expect(product.profitMargin, closeTo(55.55, 0.01));
+    });
+    test('Hold and resume local table Open Bill preserves cart items', () {
+      final provider = PosProvider();
+      final product = Product(
+        id: 11,
+        name: 'Sate Usus Bakar',
+        category: 'Sate-satean',
+        buyPrice: 1500,
+        sellPrice: 3000,
+        stock: 10,
+      );
+
+      provider.setSelectedTable('Meja 03');
+      provider.addToCart(product, selectedOption: 'Pedas');
+      provider.addToCart(product, selectedOption: 'Pedas');
+      expect(provider.cartCount, 2);
+
+      final held = provider.holdCurrentCartToTable();
+      expect(held, isTrue);
+      expect(provider.cartCount, 0);
+      expect(provider.heldTableOrders.containsKey('Meja 03'), isTrue);
+
+      provider.resumeHeldTableOrder('Meja 03');
+      expect(provider.selectedTable, 'Meja 03');
+      expect(provider.cartCount, 2);
+      expect(provider.getProductCartQuantity(11), 2);
+      expect(provider.heldTableOrders.containsKey('Meja 03'), isFalse);
+      provider.dispose();
     });
   });
 
@@ -36,6 +65,46 @@ void main() {
       final cartItem = CartItem(product: product, quantity: 3);
       expect(cartItem.subtotal, 75000);
       expect(cartItem.totalProfit, 39000);
+    });
+
+    test('Does not exceed stock across product options', () {
+      final provider = PosProvider();
+      final product = Product(
+        id: 9,
+        name: 'Wedang Jahe',
+        category: 'Wedangan',
+        buyPrice: 3000,
+        sellPrice: 6000,
+        stock: 2,
+      );
+
+      provider.addToCart(product, selectedOption: 'Panas');
+      provider.addToCart(product, selectedOption: 'Panas');
+      provider.addToCart(product, selectedOption: 'Dingin');
+
+      expect(provider.cartCount, 2);
+      provider.dispose();
+    });
+  });
+
+  group('OrderModel Tests', () {
+    test('Preserves unknown cost status for online orders', () {
+      final order = OrderModel(
+        invoiceNumber: 'QR-01-20261105',
+        createdAt: DateTime(2026, 11, 5),
+        totalAmount: 12000,
+        finalAmount: 12000,
+        paymentAmount: 12000,
+        changeAmount: 0,
+        paymentMethod: 'tunai',
+        costKnown: false,
+      );
+
+      expect(order.toMap()['cost_known'], 0);
+      expect(
+        OrderModel.fromMap({...order.toMap(), 'id': 1}).costKnown,
+        isFalse,
+      );
     });
   });
 

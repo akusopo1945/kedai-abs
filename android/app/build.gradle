@@ -22,6 +22,12 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+def signingProperties = new Properties()
+def signingPropertiesFile = rootProject.file('key.properties')
+if (signingPropertiesFile.exists()) {
+    signingProperties.load(new FileInputStream(signingPropertiesFile))
+}
+
 android {
     namespace "com.kedai.kedai_abs"
     compileSdk = flutter.compileSdkVersion
@@ -49,9 +55,20 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        release {
+            if (signingPropertiesFile.exists()) {
+                storeFile = file(signingProperties['storeFile'])
+                storePassword = signingProperties['storePassword']
+                keyAlias = signingProperties['keyAlias']
+                keyPassword = signingProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            signingConfig = signingPropertiesFile.exists() ? signingConfigs.release : null
             minifyEnabled = false
             shrinkResources = false
         }
