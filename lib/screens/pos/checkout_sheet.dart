@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../models/order.dart';
 import '../../providers/pos_provider.dart';
 import 'receipt_screen.dart';
 
@@ -16,7 +17,8 @@ class CheckoutSheet extends StatefulWidget {
 class _CheckoutSheetState extends State<CheckoutSheet> {
   final TextEditingController _cashController = TextEditingController();
   final TextEditingController _customerController = TextEditingController();
-  String _selectedPaymentMethod = 'Tunai';
+  final TextEditingController _phoneController = TextEditingController();
+  String _selectedPaymentMethod = AppConstants.paymentCash;
   double _paidAmount = 0.0;
   bool _isProcessing = false;
 
@@ -32,6 +34,7 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
   void dispose() {
     _cashController.dispose();
     _customerController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -47,7 +50,11 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
     final pos = context.watch<PosProvider>();
     final total = pos.cartTotal;
     final change = (_paidAmount - total).clamp(0.0, double.infinity);
-    final canPay = _selectedPaymentMethod != 'Tunai' || _paidAmount >= total;
+    final isDebt = _selectedPaymentMethod == AppConstants.paymentDebt;
+    final canPay = isDebt
+        ? _customerController.text.trim().isNotEmpty
+        : _selectedPaymentMethod != AppConstants.paymentCash ||
+            _paidAmount >= total;
 
     return Container(
       padding: EdgeInsets.only(
@@ -100,11 +107,26 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
             // Customer Name
             TextField(
               controller: _customerController,
-              decoration: const InputDecoration(
-                labelText: 'Nama Pelanggan (Opsional)',
-                prefixIcon: Icon(Icons.person_outline, size: 20),
+              textCapitalization: TextCapitalization.words,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: isDebt
+                    ? 'Nama Pelanggan (wajib untuk kasbon)'
+                    : 'Nama Pelanggan (Opsional)',
+                prefixIcon: const Icon(Icons.person_outline, size: 20),
               ),
             ),
+            if (isDebt) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'No. WhatsApp (Opsional)',
+                  prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Payment Methods
@@ -119,13 +141,35 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildMethodChip('Tunai', Icons.payments_outlined),
+                _buildMethodChip(
+                  AppConstants.paymentCash,
+                  Icons.payments_outlined,
+                ),
                 const SizedBox(width: 8),
-                _buildMethodChip('QRIS', Icons.qr_code_scanner),
+                _buildMethodChip(
+                  AppConstants.paymentQris,
+                  Icons.qr_code_scanner,
+                ),
                 const SizedBox(width: 8),
-                _buildMethodChip('Transfer', Icons.account_balance_outlined),
+                _buildMethodChip(
+                  AppConstants.paymentTransfer,
+                  Icons.account_balance_outlined,
+                ),
+                const SizedBox(width: 8),
+                _buildMethodChip(
+                  AppConstants.paymentDebt,
+                  Icons.menu_book_outlined,
+                ),
               ],
             ),
+            if (isDebt) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Pesanan dicatat sebagai piutang. Terima pembayarannya nanti '
+                'lewat Laporan > Kasbon.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Total Tagihan Box
@@ -161,7 +205,7 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
             const SizedBox(height: 16),
 
             // Cash input & chips if Tunai
-            if (_selectedPaymentMethod == 'Tunai') ...[
+            if (_selectedPaymentMethod == AppConstants.paymentCash) ...[
               TextField(
                 controller: _cashController,
                 keyboardType: TextInputType.number,
@@ -206,7 +250,8 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
 
               // Change Calculation
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: change > 0 ? AppTheme.surface : AppTheme.borderSubtle,
                   borderRadius: BorderRadius.circular(10),
@@ -228,7 +273,8 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: change > 0 ? AppTheme.accent : AppTheme.textPrimary,
+                        color:
+                            change > 0 ? AppTheme.accent : AppTheme.textPrimary,
                       ),
                     ),
                   ],
@@ -246,27 +292,45 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
                     ? null
                     : () async {
                         setState(() => _isProcessing = true);
-                        final createdOrder = await pos.checkout(
-                          paymentAmount: _selectedPaymentMethod == 'Tunai'
-                              ? _paidAmount
-                              : total,
-                          paymentMethod: _selectedPaymentMethod,
-                          customerName: _customerController.text.trim().isEmpty
-                              ? null
-                              : _customerController.text.trim(),
-                        );
+                        final navigator = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final customerName = _customerController.text.trim();
+                        final customerPhone = _phoneController.text.trim();
+                        final OrderModel? createdOrder;
+                        try {
+                          createdOrder = await pos.checkout(
+                            paymentAmount: _selectedPaymentMethod ==
+                                    AppConstants.paymentCash
+                                ? _paidAmount
+                                : total,
+                            paymentMethod: _selectedPaymentMethod,
+                            customerName:
+                                customerName.isEmpty ? null : customerName,
+                            customerPhone: isDebt && customerPhone.isNotEmpty
+                                ? customerPhone
+                                : null,
+                          );
+                        } catch (e) {
+                          if (mounted) setState(() => _isProcessing = false);
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Transaksi gagal disimpan: $e'),
+                              backgroundColor: AppTheme.danger,
+                            ),
+                          );
+                          return;
+                        }
 
-                        if (mounted) {
-                          Navigator.pop(context); // Close sheet
-                          if (createdOrder != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ReceiptScreen(order: createdOrder),
-                              ),
-                            );
-                          }
+                        if (!mounted) return;
+                        navigator.pop(); // Close sheet
+                        if (createdOrder != null) {
+                          final receiptOrder = createdOrder;
+                          navigator.push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  ReceiptScreen(order: receiptOrder),
+                            ),
+                          );
                         }
                       },
                 child: _isProcessing
@@ -278,9 +342,11 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text(
-                        'Konfirmasi & Selesaikan Transaksi',
-                        style: TextStyle(
+                    : Text(
+                        isDebt
+                            ? 'Simpan sebagai Kasbon'
+                            : 'Konfirmasi & Selesaikan Transaksi',
+                        style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -301,7 +367,7 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
         onTap: () {
           setState(() {
             _selectedPaymentMethod = method;
-            if (method != 'Tunai') {
+            if (method != AppConstants.paymentCash) {
               final pos = Provider.of<PosProvider>(context, listen: false);
               _paidAmount = pos.cartTotal;
             }

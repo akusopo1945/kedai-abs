@@ -56,8 +56,13 @@ class PrinterService {
       buffer.writeln(_twoColumnText('Diskon', '-${CurrencyFormatter.format(order.discountAmount)}', width));
     }
     buffer.writeln(_twoColumnText('Total Bayar', CurrencyFormatter.format(order.finalAmount), width));
-    buffer.writeln(_twoColumnText('Tunai Diterima', CurrencyFormatter.format(order.paymentAmount), width));
-    buffer.writeln(_twoColumnText('Kembalian', CurrencyFormatter.format(order.changeAmount), width));
+    if (order.isDebt) {
+      buffer.writeln(_twoColumnText('Dibayar', CurrencyFormatter.format(order.paidAmount), width));
+      buffer.writeln(_twoColumnText('SISA KASBON', CurrencyFormatter.format(order.outstandingAmount), width));
+    } else {
+      buffer.writeln(_twoColumnText('Tunai Diterima', CurrencyFormatter.format(order.paymentAmount), width));
+      buffer.writeln(_twoColumnText('Kembalian', CurrencyFormatter.format(order.changeAmount), width));
+    }
 
     buffer.writeln(divider);
 

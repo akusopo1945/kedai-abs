@@ -145,12 +145,16 @@ class PosScreen extends StatelessWidget {
                   TextButton.icon(
                     onPressed: () {
                       final table = pos.selectedTable;
-                      pos.resumeHeldTableOrder(table);
+                      final resumed = pos.resumeHeldTableOrder(table);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content:
-                              Text('Tagihan $table dimuat kembali ke kasir.'),
-                          backgroundColor: AppTheme.primary,
+                          content: Text(
+                            resumed
+                                ? 'Tagihan $table dimuat kembali ke kasir.'
+                                : 'Kosongkan atau simpan keranjang dulu sebelum membuka bill lain.',
+                          ),
+                          backgroundColor:
+                              resumed ? AppTheme.primary : AppTheme.danger,
                           duration: const Duration(seconds: 2),
                         ),
                       );
@@ -347,11 +351,12 @@ class PosScreen extends StatelessWidget {
                     const Spacer(),
                     // Hold / Save Open Bill Button
                     OutlinedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         final table = pos.selectedTable;
-                        final ok = pos.holdCurrentCartToTable(table);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final ok = await pos.holdCurrentCartToTable(table);
                         if (ok) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                 'Pesanan disimpan ke $table (Open Bill).',

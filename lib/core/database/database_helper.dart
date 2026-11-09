@@ -1,17 +1,44 @@
+import 'dart:math' show min;
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+import '../../models/cart_item.dart';
 import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/order.dart';
+import '../../models/payment.dart';
+import '../../models/shift.dart';
 import '../../models/store_profile.dart';
 import '../constants/app_constants.dart';
+import '../utils/id_generator.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static String? _pathOverride;
+
+  /// Tables included in backups, parents before children.
+  static const List<String> backupTables = [
+    'categories',
+    'products',
+    'store_settings',
+    'shifts',
+    'orders',
+    'order_items',
+    'payments',
+    'held_orders',
+  ];
 
   DatabaseHelper._init();
+
+  @visibleForTesting
+  static Future<void> useDatabaseAtPath(String path) async {
+    await _database?.close();
+    _database = null;
+    _pathOverride = path;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -20,8 +47,7 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+    final path = _pathOverride ?? join(await getDatabasesPath(), filePath);
 
     return await openDatabase(
       path,
@@ -112,6 +138,7 @@ class DatabaseHelper {
     // Seed default data
     await _seedInitialData(db);
     await _createIndexes(db);
+    await _migrateToV5(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -163,6 +190,118 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       await _createIndexes(db);
     }
+    if (oldVersion < 5) {
+      await _migrateToV5(db);
+    }
+  }
+
+  /// Shifts, payments (cash ledger incl. debt repayments) and persisted open
+  /// bills. Idempotent, so it is also safe after restoring older backups.
+  Future<void> _migrateToV5(DatabaseExecutor db) async {
+    await _addColumnIfMissing(db, 'orders', 'uuid', 'TEXT');
+    await _addColumnIfMissing(db, 'orders', 'shift_id', 'INTEGER');
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'source',
+      "TEXT NOT NULL DEFAULT 'pos'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'payment_status',
+      "TEXT NOT NULL DEFAULT 'lunas'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'paid_amount',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, 'orders', 'customer_phone', 'TEXT');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE,
+        opened_at TEXT NOT NULL,
+        closed_at TEXT,
+        opening_cash REAL NOT NULL DEFAULT 0,
+        counted_cash REAL,
+        expected_cash REAL,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'open'
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE,
+        order_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        method TEXT NOT NULL,
+        paid_at TEXT NOT NULL,
+        shift_id INTEGER,
+        note TEXT,
+        FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS held_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        product_id INTEGER NOT NULL,
+        selected_option TEXT,
+        note TEXT,
+        quantity INTEGER NOT NULL,
+        held_at TEXT NOT NULL
+      )
+    ''');
+
+    await _backfillV5(db);
+
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_uuid ON orders (uuid)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_shift ON orders (shift_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders (payment_status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_payments_order ON payments (order_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_payments_shift ON payments (shift_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_held_orders_table ON held_orders (table_name)',
+    );
+  }
+
+  /// Gives pre-v5 orders an identity and a matching payment record so cash
+  /// reports stay consistent with history.
+  Future<void> _backfillV5(DatabaseExecutor db) async {
+    await db.execute(
+      "UPDATE orders SET uuid = 'legacy-' || id WHERE uuid IS NULL OR uuid = ''",
+    );
+    await db.execute(
+      "UPDATE orders SET source = 'qr' WHERE invoice_number LIKE 'QR-%' AND source = 'pos'",
+    );
+    await db.execute('''
+      UPDATE orders SET paid_amount = final_amount
+      WHERE payment_status = 'lunas' AND paid_amount = 0 AND final_amount > 0
+        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id)
+    ''');
+    await db.execute('''
+      INSERT INTO payments (uuid, order_id, amount, method, paid_at, shift_id)
+      SELECT 'legacy-pay-' || o.id, o.id, o.final_amount, o.payment_method,
+             o.created_at, o.shift_id
+      FROM orders o
+      WHERE o.payment_status = 'lunas' AND o.final_amount > 0
+        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id)
+    ''');
   }
 
   Future<void> _createIndexes(DatabaseExecutor db) async {
@@ -477,7 +616,11 @@ class DatabaseHelper {
   }
 
   // --- Orders & Transactions ---
-  Future<int> insertOrder(OrderModel order, {bool deductStock = true}) async {
+  Future<int> insertOrder(
+    OrderModel order, {
+    bool deductStock = true,
+    PaymentModel? payment,
+  }) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
       // 1. Insert order
@@ -500,6 +643,10 @@ class DatabaseHelper {
         }
       }
 
+      if (payment != null) {
+        await txn.insert('payments', {...payment.toMap(), 'order_id': orderId});
+      }
+
       return orderId;
     });
   }
@@ -516,42 +663,81 @@ class DatabaseHelper {
     return result.isNotEmpty;
   }
 
+  ({String where, List<Object?> args}) _orderFilter({
+    int? shiftId,
+    DateTime? start,
+    DateTime? end,
+    bool debtOnly = false,
+    String alias = '',
+  }) {
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (shiftId != null) {
+      clauses.add('${alias}shift_id = ?');
+      args.add(shiftId);
+    }
+    if (start != null) {
+      clauses.add('${alias}created_at >= ?');
+      args.add(start.toIso8601String());
+    }
+    if (end != null) {
+      clauses.add('${alias}created_at < ?');
+      args.add(end.toIso8601String());
+    }
+    if (debtOnly) {
+      clauses.add('${alias}payment_status = ?');
+      args.add(OrderModel.paymentUnpaid);
+    }
+    return (
+      where: clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}',
+      args: args,
+    );
+  }
+
+  /// [end] is exclusive.
   Future<List<OrderModel>> getOrders({
-    DateTime? startDate,
-    DateTime? endDate,
+    int? shiftId,
+    DateTime? start,
+    DateTime? end,
+    bool debtOnly = false,
+    bool oldestFirst = false,
+    int? limit,
   }) async {
     final db = await instance.database;
-    String? whereClause;
-    List<dynamic>? whereArgs;
+    final filter = _orderFilter(
+      shiftId: shiftId,
+      start: start,
+      end: end,
+      debtOnly: debtOnly,
+    );
+    final direction = oldestFirst ? 'ASC' : 'DESC';
 
-    if (startDate != null && endDate != null) {
-      whereClause = 'created_at BETWEEN ? AND ?';
-      whereArgs = [startDate.toIso8601String(), endDate.toIso8601String()];
-    }
-
-    final orderRows = await db.query(
-      'orders',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'created_at DESC',
+    final orderRows = await db.rawQuery(
+      'SELECT * FROM orders ${filter.where} '
+      'ORDER BY created_at $direction, id $direction'
+      '${limit != null ? ' LIMIT $limit' : ''}',
+      filter.args,
     );
 
     if (orderRows.isEmpty) return [];
 
     final orderIds = orderRows.map((r) => r['id'] as int).toList();
-    final placeholders = List.filled(orderIds.length, '?').join(',');
-    final allItemRows = await db.query(
-      'order_items',
-      where: 'order_id IN ($placeholders)',
-      whereArgs: orderIds,
-    );
-
     final itemsByOrderId = <int, List<OrderItem>>{};
-    for (final itemRow in allItemRows) {
-      final item = OrderItem.fromMap(itemRow);
-      final oid = item.orderId;
-      if (oid != null) {
-        (itemsByOrderId[oid] ??= []).add(item);
+    // Stay well below SQLite's bound-parameter limit.
+    for (var i = 0; i < orderIds.length; i += 500) {
+      final chunk = orderIds.sublist(i, min(i + 500, orderIds.length));
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final itemRows = await db.query(
+        'order_items',
+        where: 'order_id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      for (final itemRow in itemRows) {
+        final item = OrderItem.fromMap(itemRow);
+        final oid = item.orderId;
+        if (oid != null) {
+          (itemsByOrderId[oid] ??= []).add(item);
+        }
       }
     }
 
@@ -564,30 +750,367 @@ class DatabaseHelper {
     }).toList();
   }
 
-  Future<Map<String, double>> getSummary(DateTime start, DateTime end) async {
-    final orders = await getOrders(startDate: start, endDate: end);
+  Future<SalesSummary> getSalesSummary({
+    int? shiftId,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    final db = await instance.database;
+    final filter = _orderFilter(
+      shiftId: shiftId,
+      start: start,
+      end: end,
+      alias: 'o.',
+    );
+    final totals = (await db.rawQuery('''
+      SELECT COUNT(*) AS trx,
+             COALESCE(SUM(o.final_amount), 0) AS revenue,
+             COALESCE(SUM(CASE WHEN o.cost_known = 1 THEN o.final_amount ELSE 0 END), 0) AS known_revenue,
+             COALESCE(SUM(CASE WHEN o.cost_known = 0 THEN 1 ELSE 0 END), 0) AS unknown_cost
+      FROM orders o ${filter.where}
+    ''', filter.args)).first;
+    final costWhere = filter.where.isEmpty
+        ? 'WHERE o.cost_known = 1'
+        : '${filter.where} AND o.cost_known = 1';
+    final cost = (await db.rawQuery('''
+      SELECT COALESCE(SUM(oi.buy_price * oi.quantity), 0) AS cost
+      FROM order_items oi JOIN orders o ON o.id = oi.order_id
+      $costWhere
+    ''', filter.args)).first;
 
-    double totalRevenue = 0;
-    double totalCost = 0;
+    return SalesSummary(
+      transactionCount: _asInt(totals['trx']),
+      revenue: _asDouble(totals['revenue']),
+      profit: _asDouble(totals['known_revenue']) - _asDouble(cost['cost']),
+      unknownCostCount: _asInt(totals['unknown_cost']),
+    );
+  }
 
-    for (final order in orders) {
-      totalRevenue += order.finalAmount;
-      if (!order.costKnown) continue;
-      for (final item in order.items) {
-        totalCost += (item.buyPrice * item.quantity);
+  Future<double> getOutstandingDebtTotal() async {
+    final db = await instance.database;
+    final row = (await db.rawQuery(
+      'SELECT COALESCE(SUM(final_amount - paid_amount), 0) AS total '
+      'FROM orders WHERE payment_status = ?',
+      [OrderModel.paymentUnpaid],
+    ))
+        .first;
+    return _asDouble(row['total']);
+  }
+
+  /// Records a debt repayment and returns the remaining balance.
+  Future<double> addPayment({
+    required int orderId,
+    required double amount,
+    required String method,
+    required int? shiftId,
+  }) async {
+    final db = await instance.database;
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        columns: ['final_amount', 'paid_amount'],
+        where: 'id = ?',
+        whereArgs: [orderId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Transaksi tidak ditemukan.');
+      final finalAmount = _asDouble(rows.first['final_amount']);
+      final paidAmount = _asDouble(rows.first['paid_amount']);
+      final outstanding = finalAmount - paidAmount;
+      if (outstanding <= 0) throw StateError('Transaksi ini sudah lunas.');
+      if (amount <= 0)
+        throw StateError('Nominal pembayaran harus lebih dari 0.');
+      if (amount > outstanding) {
+        throw StateError('Nominal melebihi sisa tagihan.');
+      }
+
+      await txn.insert('payments', {
+        ...PaymentModel(
+          uuid: generateUuid(),
+          amount: amount,
+          method: method,
+          paidAt: DateTime.now(),
+          shiftId: shiftId,
+        ).toMap(),
+        'order_id': orderId,
+      });
+      final newPaid = paidAmount + amount;
+      final remaining = finalAmount - newPaid;
+      await txn.update(
+        'orders',
+        {
+          'paid_amount': newPaid,
+          'payment_status': remaining <= 0
+              ? OrderModel.paymentPaid
+              : OrderModel.paymentUnpaid,
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      return remaining > 0 ? remaining : 0;
+    });
+  }
+
+  // --- Shifts ---
+  Future<ShiftModel?> getOpenShift() async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'shifts',
+      where: 'status = ?',
+      whereArgs: [ShiftModel.statusOpen],
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ShiftModel.fromMap(rows.first);
+  }
+
+  Future<ShiftModel?> getLatestShift() async {
+    final db = await instance.database;
+    final rows = await db.query('shifts', orderBy: 'id DESC', limit: 1);
+    return rows.isEmpty ? null : ShiftModel.fromMap(rows.first);
+  }
+
+  Future<ShiftModel> openShift({double openingCash = 0}) async {
+    final db = await instance.database;
+    final shift = ShiftModel(
+      uuid: generateUuid(),
+      openedAt: DateTime.now(),
+      openingCash: openingCash,
+    );
+    final id = await db.insert('shifts', shift.toMap());
+    return ShiftModel.fromMap({...shift.toMap(), 'id': id});
+  }
+
+  Future<ShiftModel> updateShiftOpeningCash(int shiftId, double amount) async {
+    final db = await instance.database;
+    await db.update(
+      'shifts',
+      {'opening_cash': amount},
+      where: 'id = ? AND status = ?',
+      whereArgs: [shiftId, ShiftModel.statusOpen],
+    );
+    final rows =
+        await db.query('shifts', where: 'id = ?', whereArgs: [shiftId]);
+    return ShiftModel.fromMap(rows.first);
+  }
+
+  Future<ShiftModel> closeShift(
+    int shiftId, {
+    required double countedCash,
+    required double expectedCash,
+    String? note,
+  }) async {
+    final db = await instance.database;
+    final updated = await db.update(
+      'shifts',
+      {
+        'status': ShiftModel.statusClosed,
+        'closed_at': DateTime.now().toIso8601String(),
+        'counted_cash': countedCash,
+        'expected_cash': expectedCash,
+        'note': note,
+      },
+      where: 'id = ? AND status = ?',
+      whereArgs: [shiftId, ShiftModel.statusOpen],
+    );
+    if (updated == 0) throw StateError('Shift sudah ditutup sebelumnya.');
+    final rows =
+        await db.query('shifts', where: 'id = ?', whereArgs: [shiftId]);
+    return ShiftModel.fromMap(rows.first);
+  }
+
+  Future<ShiftSummary> getShiftSummary(ShiftModel shift) async {
+    final db = await instance.database;
+    final shiftId = shift.id;
+    final sales = await getSalesSummary(shiftId: shiftId);
+
+    final newDebt = (await db.rawQuery(
+      'SELECT COALESCE(SUM(final_amount), 0) AS total FROM orders '
+      'WHERE shift_id = ? AND payment_method = ?',
+      [shiftId, AppConstants.paymentDebt],
+    ))
+        .first;
+
+    final paymentRows = await db.rawQuery(
+      'SELECT method, COALESCE(SUM(amount), 0) AS total FROM payments '
+      'WHERE shift_id = ? GROUP BY method',
+      [shiftId],
+    );
+    final byMethod = <String, double>{};
+    var cashIn = 0.0;
+    for (final row in paymentRows) {
+      final method = row['method'] as String;
+      final total = _asDouble(row['total']);
+      final isCash = AppConstants.isCashMethod(method);
+      final key = isCash ? AppConstants.paymentCash : method;
+      byMethod[key] = (byMethod[key] ?? 0) + total;
+      if (isCash) cashIn += total;
+    }
+
+    final collected = (await db.rawQuery(
+      'SELECT COALESCE(SUM(p.amount), 0) AS total FROM payments p '
+      'JOIN orders o ON o.id = p.order_id '
+      'WHERE p.shift_id = ? AND o.payment_method = ?',
+      [shiftId, AppConstants.paymentDebt],
+    ))
+        .first;
+
+    return ShiftSummary(
+      shift: shift,
+      sales: sales,
+      newDebt: _asDouble(newDebt['total']),
+      debtCollected: _asDouble(collected['total']),
+      paymentsByMethod: byMethod,
+      cashIn: cashIn,
+      outstandingDebt: await getOutstandingDebtTotal(),
+    );
+  }
+
+  // --- Open bills (held table orders) ---
+  Future<Map<String, List<CartItem>>> getHeldOrders() async {
+    final db = await instance.database;
+    final rows = await db.query('held_orders', orderBy: 'id ASC');
+    if (rows.isEmpty) return {};
+
+    final productIds = rows.map((r) => r['product_id'] as int).toSet().toList();
+    final placeholders = List.filled(productIds.length, '?').join(',');
+    // Includes inactive products so a held bill survives a menu deletion.
+    final productRows = await db.query(
+      'products',
+      where: 'id IN ($placeholders)',
+      whereArgs: productIds,
+    );
+    final products = {
+      for (final row in productRows) row['id'] as int: Product.fromMap(row),
+    };
+
+    final result = <String, List<CartItem>>{};
+    for (final row in rows) {
+      final product = products[row['product_id'] as int];
+      if (product == null) continue;
+      (result[row['table_name'] as String] ??= []).add(
+        CartItem(
+          product: product,
+          quantity: row['quantity'] as int,
+          selectedOption: row['selected_option'] as String?,
+          note: row['note'] as String?,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// Replaces the stored bill for [table]; [removeTable] is deleted in the
+  /// same transaction when a bill moves to another table.
+  Future<void> replaceHeldOrder(
+    String table,
+    List<CartItem> items, {
+    String? removeTable,
+  }) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn
+          .delete('held_orders', where: 'table_name = ?', whereArgs: [table]);
+      if (removeTable != null && removeTable != table) {
+        await txn.delete(
+          'held_orders',
+          where: 'table_name = ?',
+          whereArgs: [removeTable],
+        );
+      }
+      for (final item in items) {
+        await txn.insert('held_orders', {
+          'table_name': table,
+          'product_id': item.product.id,
+          'selected_option': item.selectedOption,
+          'note': item.note,
+          'quantity': item.quantity,
+          'held_at': now,
+        });
+      }
+    });
+  }
+
+  Future<void> deleteHeldOrder(String table) async {
+    final db = await instance.database;
+    await db.delete('held_orders', where: 'table_name = ?', whereArgs: [table]);
+  }
+
+  // --- Backup & restore ---
+  Future<Map<String, Object?>> exportBackup() async {
+    final db = await instance.database;
+    final tables = <String, Object?>{};
+    for (final table in backupTables) {
+      tables[table] = await db.query(table);
+    }
+    return {
+      'app': 'kedai_abs',
+      'schema_version': AppConstants.dbVersion,
+      'exported_at': DateTime.now().toIso8601String(),
+      'tables': tables,
+    };
+  }
+
+  /// Replaces all local data with [backup]. Throws [FormatException] when the
+  /// file is not a valid Kedai POS backup.
+  Future<void> restoreBackup(Map<String, dynamic> backup) async {
+    if (backup['app'] != 'kedai_abs') {
+      throw const FormatException('File ini bukan cadangan Kedai POS.');
+    }
+    final version = backup['schema_version'];
+    if (version is! int || version > AppConstants.dbVersion) {
+      throw const FormatException(
+        'Cadangan dibuat oleh versi aplikasi yang lebih baru.',
+      );
+    }
+    final tables = backup['tables'];
+    if (tables is! Map<String, dynamic>) {
+      throw const FormatException('Isi cadangan tidak lengkap.');
+    }
+    for (final required in [
+      'products',
+      'orders',
+      'order_items',
+      'store_settings'
+    ]) {
+      if (tables[required] is! List) {
+        throw FormatException('Tabel $required tidak ada di cadangan.');
       }
     }
 
-    final totalProfit = totalRevenue - totalCost;
-
-    return {
-      'revenue': totalRevenue,
-      'profit': totalProfit,
-      'transactions': orders.length.toDouble(),
-      'unknown_cost_transactions':
-          orders.where((order) => !order.costKnown).length.toDouble(),
-    };
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      for (final table in backupTables.reversed) {
+        await txn.delete(table);
+      }
+      for (final table in backupTables) {
+        final rows = tables[table];
+        if (rows is! List) continue;
+        final columns = (await txn.rawQuery('PRAGMA table_info($table)'))
+            .map((c) => c['name'] as String)
+            .toSet();
+        for (final row in rows) {
+          if (row is! Map<String, dynamic>) {
+            throw FormatException('Baris tidak valid di tabel $table.');
+          }
+          await txn.insert(table, {
+            for (final entry in row.entries)
+              if (columns.contains(entry.key)) entry.key: entry.value,
+          });
+        }
+      }
+      if ((await txn.query('store_settings', limit: 1)).isEmpty) {
+        await txn
+            .insert('store_settings', {'id': 1, ...StoreProfile().toMap()});
+      }
+      await _backfillV5(txn);
+    });
   }
+
+  static double _asDouble(Object? value) => (value as num?)?.toDouble() ?? 0;
+
+  static int _asInt(Object? value) => (value as num?)?.toInt() ?? 0;
 
   // --- Store Profile ---
   Future<StoreProfile> getStoreProfile() async {

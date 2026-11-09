@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/services/backup_service.dart';
 import '../../core/services/menu_jajan_api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/store_profile.dart';
@@ -46,6 +47,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _footerController.dispose();
     _serverUrlController.dispose();
     super.dispose();
+  }
+
+  void _loadProfileIntoForm(StoreProfile profile) {
+    setState(() {
+      _nameController.text = profile.name;
+      _addressController.text = profile.address;
+      _phoneController.text = profile.phone;
+      _footerController.text = profile.receiptFooter;
+      _serverUrlController.text = profile.serverUrl;
+      _paperWidth = profile.paperWidth;
+    });
+  }
+
+  Future<void> _handleShareBackup(PosProvider pos) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await BackupService.shareBackup(pos);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal membuat cadangan: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleRestoreBackup(PosProvider pos) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pulihkan dari cadangan?'),
+        content: const Text(
+          'Semua data di HP ini (produk, transaksi, kasbon, shift) akan '
+          'diganti dengan isi file cadangan. Tindakan ini tidak bisa dibatalkan. '
+          'Kirim cadangan data saat ini dulu jika masih dibutuhkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('Pilih File & Pulihkan'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final raw = await BackupService.pickBackupFile();
+      if (raw == null) return;
+      await pos.restoreBackupJson(raw);
+      if (!mounted) return;
+      _loadProfileIntoForm(pos.storeProfile);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Data berhasil dipulihkan dari cadangan.'),
+          backgroundColor: AppTheme.accent,
+        ),
+      );
+    } on FormatException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppTheme.danger),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal memulihkan data: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   Future<void> _handleTestApi(PosProvider pos) async {
@@ -388,6 +466,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   },
                 ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Backup & restore
+              const Text(
+                'Cadangan Data',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Semua data tersimpan di HP ini. Cadangan juga dikirim otomatis '
+                'saat Tutup Kasir. Simpan file ke Google Drive atau WhatsApp '
+                'pemilik agar data aman jika HP rusak atau hilang.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                      label: const Text('Kirim Cadangan'),
+                      onPressed: () => _handleShareBackup(pos),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.restore_outlined, size: 18),
+                      label: const Text('Pulihkan'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.danger,
+                        side: const BorderSide(color: AppTheme.danger),
+                      ),
+                      onPressed: () => _handleRestoreBackup(pos),
+                    ),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 32),

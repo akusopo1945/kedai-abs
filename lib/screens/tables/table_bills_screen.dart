@@ -253,7 +253,34 @@ class _TableBillsScreenState extends State<TableBillsScreen>
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => pos.deleteHeldTableOrder(tableName),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: Text('Hapus open bill $tableName?'),
+                              content: const Text(
+                                'Pesanan yang disimpan untuk meja ini akan dihapus '
+                                'dan tidak tercatat sebagai penjualan.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Batal'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.danger,
+                                  ),
+                                  child: const Text('Hapus'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await pos.deleteHeldTableOrder(tableName);
+                          }
+                        },
                         icon: const Icon(Icons.delete_outline, size: 16),
                         label: const Text('Hapus'),
                         style: OutlinedButton.styleFrom(
@@ -267,13 +294,17 @@ class _TableBillsScreenState extends State<TableBillsScreen>
                       flex: 2,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          pos.resumeHeldTableOrder(tableName);
+                          final resumed = pos.resumeHeldTableOrder(tableName);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Tagihan $tableName dimuat ke tab Kasir.',
+                                resumed
+                                    ? 'Tagihan $tableName dimuat ke tab Kasir.'
+                                    : 'Keranjang kasir masih berisi pesanan. '
+                                        'Selesaikan atau simpan dulu.',
                               ),
-                              backgroundColor: AppTheme.primary,
+                              backgroundColor:
+                                  resumed ? AppTheme.primary : AppTheme.danger,
                             ),
                           );
                         },

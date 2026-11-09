@@ -23,6 +23,16 @@ Aplikasi Point of Sale (POS) Android berbasis **Flutter** dengan konsep **Offlin
 5. **100% Offline-First (SQLite):**
    - Semua data tersimpan lokal di perangkat Android.
    - Tidak memerlukan langganan cloud bulanan.
+6. **Shift & Tutup Kasir:**
+   - Shift dibuka otomatis saat transaksi pertama; modal awal kas bisa diisi.
+   - Closing menghitung omzet, uang masuk per metode, kas seharusnya, dan selisih kas fisik, lalu mengunci shift.
+   - Closing ditolak selama masih ada open bill atau keranjang berisi pesanan.
+7. **Kasbon (Piutang Pelanggan):**
+   - Metode bayar "Kasbon" mencatat penjualan sekali; pelunasan (penuh/cicil) dicatat sebagai uang masuk di shift saat dibayar, bukan penjualan baru.
+   - Daftar kasbon menampilkan sisa, umur hutang, dan pengingat yang bisa dibagikan.
+8. **Cadangan Data:**
+   - File cadangan JSON dibuat dan dibagikan otomatis saat Tutup Kasir (Google Drive/WhatsApp), atau manual dari Pengaturan.
+   - Pulihkan data di HP baru dari file cadangan.
 
 ---
 

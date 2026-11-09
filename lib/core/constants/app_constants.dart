@@ -1,8 +1,25 @@
 class AppConstants {
   static const String appName = 'Kedai POS - Angkringan Bersua Sejenak';
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.2.0';
   static const String dbName = 'kedai_pos_abs.db';
-  static const int dbVersion = 4;
+  static const int dbVersion = 5;
+
+  // Payment methods
+  static const String paymentCash = 'Tunai';
+  static const String paymentQris = 'QRIS';
+  static const String paymentTransfer = 'Transfer';
+  static const String paymentDebt = 'Kasbon';
+  static const List<String> settlementMethods = [
+    paymentCash,
+    paymentQris,
+    paymentTransfer,
+  ];
+
+  /// Older records store cash as 'tunai' or 'cash'.
+  static bool isCashMethod(String method) {
+    final normalized = method.trim().toLowerCase();
+    return normalized == 'tunai' || normalized == 'cash';
+  }
 
   // Default Categories for Angkringan Bersua Sejenak
   static const List<String> defaultCategories = [

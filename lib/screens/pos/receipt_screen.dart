@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -188,16 +189,36 @@ class ReceiptScreen extends StatelessWidget {
                     CurrencyFormatter.format(order.finalAmount),
                     isBold: true,
                   ),
-                  _buildRow(
-                    'Diterima',
-                    CurrencyFormatter.format(order.paymentAmount),
-                  ),
-                  _buildRow(
-                    'Kembalian',
-                    CurrencyFormatter.format(order.changeAmount),
-                    valueColor: AppTheme.accent,
-                    isBold: true,
-                  ),
+                  if (order.isDebt) ...[
+                    _buildRow(
+                      'Sudah Dibayar',
+                      CurrencyFormatter.format(order.paidAmount),
+                    ),
+                    _buildRow(
+                      'Sisa Kasbon',
+                      CurrencyFormatter.format(order.outstandingAmount),
+                      valueColor: AppTheme.danger,
+                      isBold: true,
+                    ),
+                  ] else if (order.paymentMethod == AppConstants.paymentDebt) ...[
+                    _buildRow(
+                      'Status',
+                      'Kasbon lunas',
+                      valueColor: AppTheme.accent,
+                      isBold: true,
+                    ),
+                  ] else ...[
+                    _buildRow(
+                      'Diterima',
+                      CurrencyFormatter.format(order.paymentAmount),
+                    ),
+                    _buildRow(
+                      'Kembalian',
+                      CurrencyFormatter.format(order.changeAmount),
+                      valueColor: AppTheme.accent,
+                      isBold: true,
+                    ),
+                  ],
 
                   const SizedBox(height: 20),
                   _buildDashedLine(),
