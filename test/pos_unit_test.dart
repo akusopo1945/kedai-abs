@@ -132,8 +132,12 @@ void main() {
       expect(receipt, contains('KEDAI BERKAH'));
       expect(receipt, contains('INV-20261013-0001'));
       expect(receipt, contains('Meja 04'));
-      expect(receipt, contains('Sate Kulit Ayam Madu (Bakar Pedas Membara)'));
+      // Long item names wrap within the 32-column paper width.
+      expect(receipt, contains('Sate Kulit Ayam Madu (Bakar\nPedas Membara)'));
       expect(receipt, contains('Kembalian'));
+      for (final line in receipt.split('\n')) {
+        expect(line.length, lessThanOrEqualTo(32), reason: line);
+      }
     });
   });
 

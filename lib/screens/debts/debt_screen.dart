@@ -210,14 +210,22 @@ class _DebtScreenState extends State<DebtScreen> {
     OrderModel order,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final result = await showDialog<({double amount, String method})>(
+    final result =
+        await showDialog<({double amount, String method, String note})>(
       context: context,
-      builder: (_) => _PaymentDialog(order: order),
+      builder: (_) => _PaymentDialog(
+        order: order,
+        methods: pos.enabledSettlementMethods,
+      ),
     );
     if (result == null) return;
 
-    final error =
-        await pos.receiveDebtPayment(order, result.amount, result.method);
+    final error = await pos.receiveDebtPayment(
+      order,
+      result.amount,
+      result.method,
+      note: result.note,
+    );
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -233,8 +241,9 @@ class _DebtScreenState extends State<DebtScreen> {
 
 class _PaymentDialog extends StatefulWidget {
   final OrderModel order;
+  final List<String> methods;
 
-  const _PaymentDialog({required this.order});
+  const _PaymentDialog({required this.order, required this.methods});
 
   @override
   State<_PaymentDialog> createState() => _PaymentDialogState();
@@ -245,10 +254,12 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     text: widget.order.outstandingAmount.toStringAsFixed(0),
   );
   String _method = AppConstants.paymentCash;
+  final _noteController = TextEditingController();
 
   @override
   void dispose() {
     _amountController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -288,7 +299,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           Wrap(
             spacing: 8,
             children: [
-              for (final method in AppConstants.settlementMethods)
+              for (final method in widget.methods)
                 ChoiceChip(
                   label: Text(method),
                   selected: _method == method,
@@ -296,6 +307,13 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 ),
             ],
           ),
+          if (_method != AppConstants.paymentCash)
+            TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'No. Referensi (opsional)',
+              ),
+            ),
         ],
       ),
       actions: [
@@ -306,7 +324,14 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         ElevatedButton(
           onPressed: error != null
               ? null
-              : () => Navigator.pop(context, (amount: amount, method: _method)),
+              : () => Navigator.pop(
+                    context,
+                    (
+                      amount: amount,
+                      method: _method,
+                      note: _noteController.text,
+                    ),
+                  ),
           child: const Text('Simpan'),
         ),
       ],

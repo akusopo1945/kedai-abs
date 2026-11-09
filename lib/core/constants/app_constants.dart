@@ -1,8 +1,8 @@
 class AppConstants {
   static const String appName = 'Kedai POS - Angkringan Bersua Sejenak';
-  static const String appVersion = '1.2.0';
+  static const String appVersion = '1.3.0';
   static const String dbName = 'kedai_pos_abs.db';
-  static const int dbVersion = 5;
+  static const int dbVersion = 6;
 
   // Payment methods
   static const String paymentCash = 'Tunai';

@@ -6,11 +6,13 @@ import 'package:flutter/foundation.dart' hide Category;
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
 import '../core/services/menu_jajan_api_service.dart';
+import '../core/services/printer_service.dart';
 import '../core/utils/id_generator.dart';
 import '../models/cart_item.dart';
 import '../models/category.dart';
 import '../models/order.dart';
 import '../models/payment.dart';
+import '../models/payment_settings.dart';
 import '../models/product.dart';
 import '../models/shift.dart';
 import '../models/store_profile.dart';
@@ -62,6 +64,17 @@ class PosProvider extends ChangeNotifier {
   double _outstandingDebt = 0;
   List<OrderModel> _debtOrders = [];
 
+  // Payment & printer settings
+  static const String _paymentSettingsKey = 'payment_settings';
+  static const String _printerSettingsKey = 'printer_settings';
+  static const String _qrisImageKey = 'qris_image';
+
+  /// Keeps the settings row below Android's 2 MB cursor window.
+  static const int maxQrisImageBytes = 1024 * 1024;
+  PaymentSettings _paymentSettings = const PaymentSettings();
+  PrinterSettings _printerSettings = const PrinterSettings();
+  Uint8List? _qrisImage;
+
   // Online Sync / menu-jajan integration
   bool _isOnlineSyncAvailable = false;
   List<BillSummary> _liveBills = [];
@@ -92,6 +105,21 @@ class PosProvider extends ChangeNotifier {
   List<OrderModel> get debtOrders => _debtOrders;
   double get discountAmount => _discountAmount;
   bool get isOnlineSyncAvailable => _isOnlineSyncAvailable;
+  PaymentSettings get paymentSettings => _paymentSettings;
+  PrinterSettings get printerSettings => _printerSettings;
+  Uint8List? get qrisImage => _qrisImage;
+
+  List<String> get enabledPaymentMethods => [
+        AppConstants.paymentCash,
+        if (_paymentSettings.qrisEnabled) AppConstants.paymentQris,
+        if (_paymentSettings.transferEnabled) AppConstants.paymentTransfer,
+        if (_paymentSettings.debtEnabled) AppConstants.paymentDebt,
+      ];
+
+  /// Methods for settling debts; always includes cash.
+  List<String> get enabledSettlementMethods => enabledPaymentMethods
+      .where((method) => method != AppConstants.paymentDebt)
+      .toList();
   List<BillSummary> get liveBills => _liveBills;
   List<dynamic> get liveOnlineOrders => _liveOnlineOrders;
 
@@ -141,6 +169,7 @@ class PosProvider extends ChangeNotifier {
   /// Loads everything stored on the device; no network access.
   Future<void> loadLocalData() async {
     await loadStoreProfile();
+    await loadAppSettings();
     await loadCategories();
     await loadProducts();
     await _reloadHeldOrders();
@@ -579,12 +608,16 @@ class PosProvider extends ChangeNotifier {
     String? customerName,
     String? customerPhone,
     String? tableNumber,
+    String? paymentNote,
   }) async {
     if (_cart.isEmpty) return null;
     final isDebt = paymentMethod == AppConstants.paymentDebt;
     if (isDebt && (customerName == null || customerName.trim().isEmpty)) {
       throw ArgumentError('Nama pelanggan wajib diisi untuk kasbon.');
     }
+    final note = isDebt || paymentNote == null || paymentNote.trim().isEmpty
+        ? null
+        : paymentNote.trim();
 
     final shift = await _ensureOpenShift();
     final now = DateTime.now();
@@ -615,6 +648,7 @@ class PosProvider extends ChangeNotifier {
       changeAmount:
           isDebt ? 0 : (paymentAmount - total).clamp(0.0, double.infinity),
       paymentMethod: paymentMethod,
+      paymentNote: note,
       customerName: customerName,
       customerPhone: customerPhone,
       tableNumber: targetTable,
@@ -632,6 +666,7 @@ class PosProvider extends ChangeNotifier {
             method: paymentMethod,
             paidAt: now,
             shiftId: shift.id,
+            note: note,
           )
         : null;
 
@@ -672,8 +707,9 @@ class PosProvider extends ChangeNotifier {
   Future<String?> receiveDebtPayment(
     OrderModel order,
     double amount,
-    String method,
-  ) async {
+    String method, {
+    String? note,
+  }) async {
     final orderId = order.id;
     if (orderId == null) return 'Transaksi tidak valid.';
     final shift = await _ensureOpenShift();
@@ -683,6 +719,7 @@ class PosProvider extends ChangeNotifier {
         amount: amount,
         method: method,
         shiftId: shift.id,
+        note: note == null || note.trim().isEmpty ? null : note.trim(),
       );
     } on StateError catch (e) {
       return e.message;
@@ -757,6 +794,127 @@ class PosProvider extends ChangeNotifier {
       paymentsByMethod: summary.paymentsByMethod,
       cashIn: summary.cashIn,
       outstandingDebt: summary.outstandingDebt,
+    );
+  }
+
+  // --- Payment & printer settings ---
+  Future<void> loadAppSettings() async {
+    final settings = await _db.getAllSettings();
+    _paymentSettings = PaymentSettings.decode(settings[_paymentSettingsKey]);
+    _printerSettings = PrinterSettings.decode(settings[_printerSettingsKey]);
+    final qris = settings[_qrisImageKey];
+    try {
+      _qrisImage = qris == null ? null : base64Decode(qris);
+    } on FormatException {
+      _qrisImage = null;
+    }
+    notifyListeners();
+  }
+
+  Future<void> savePaymentSettings(PaymentSettings settings) async {
+    await _db.setSetting(_paymentSettingsKey, settings.encode());
+    _paymentSettings = settings;
+    notifyListeners();
+  }
+
+  Future<void> savePrinterSettings(PrinterSettings settings) async {
+    await _db.setSetting(_printerSettingsKey, settings.encode());
+    if (settings.address != _printerSettings.address) {
+      unawaited(PrinterService.instance.disconnect());
+    }
+    _printerSettings = settings;
+    notifyListeners();
+  }
+
+  /// Stores the QRIS image shown at checkout; null removes it. Returns an
+  /// error message when the image is too large.
+  Future<String?> saveQrisImage(Uint8List? bytes) async {
+    if (bytes != null && bytes.length > maxQrisImageBytes) {
+      return 'Gambar QRIS terlalu besar (maks 1 MB). Pilih gambar yang lebih kecil.';
+    }
+    await _db.setSetting(
+      _qrisImageKey,
+      bytes == null ? null : base64Encode(bytes),
+    );
+    _qrisImage = bytes;
+    notifyListeners();
+    return null;
+  }
+
+  // --- Printing ---
+  Future<List<BluetoothPrinterDevice>> pairedPrinters() =>
+      PrinterService.instance.pairedPrinters();
+
+  Future<String?> _runPrint(Future<void> Function() job) async {
+    try {
+      await job();
+      return null;
+    } on PrinterException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Prints a receipt (reprints never open the cash drawer).
+  Future<String?> printReceipt(OrderModel order, {int? copies}) {
+    return _runPrint(
+      () => PrinterService.instance.printLines(
+        PrinterService.instance
+            .buildReceipt(order: order, store: _storeProfile),
+        _printerSettings,
+        copies: copies,
+      ),
+    );
+  }
+
+  /// Auto-print and cash-drawer handling right after a sale. Returns null
+  /// when nothing failed (including when nothing was configured).
+  Future<String?> handleCompletedSale(OrderModel order) async {
+    final settings = _printerSettings;
+    if (!settings.isConfigured) return null;
+    final kickDrawer = settings.openCashDrawer &&
+        AppConstants.isCashMethod(order.paymentMethod);
+    if (settings.autoPrint) {
+      return _runPrint(
+        () => PrinterService.instance.printLines(
+          PrinterService.instance
+              .buildReceipt(order: order, store: _storeProfile),
+          settings,
+          openDrawer: kickDrawer,
+        ),
+      );
+    }
+    if (kickDrawer) {
+      return _runPrint(
+        () => PrinterService.instance.sendBytes(
+          settings.address!,
+          PrinterService.instance.drawerKickBytes(),
+        ),
+      );
+    }
+    return null;
+  }
+
+  Future<String?> printDocument(String title, List<String> body) {
+    return _runPrint(
+      () => PrinterService.instance.printLines(
+        PrinterService.instance.buildDocument(
+          title: title,
+          body: body,
+          paperWidth: _storeProfile.paperWidth,
+        ),
+        _printerSettings,
+        copies: 1,
+      ),
+    );
+  }
+
+  Future<String?> printTestPage() {
+    return _runPrint(
+      () => PrinterService.instance.printLines(
+        PrinterService.instance.buildTestPage(_storeProfile),
+        _printerSettings,
+        copies: 1,
+      ),
     );
   }
 
@@ -847,8 +1005,8 @@ class PosProvider extends ChangeNotifier {
     );
     final buffer = StringBuffer()
       ..writeln(
-        'Invoice,Tanggal,Meja,Pelanggan,Sumber,Metode Bayar,Total,Diskon,'
-        'Bayar Akhir,Sudah Dibayar,Sisa,Status Bayar,Status HPP',
+        'Invoice,Tanggal,Meja,Pelanggan,Sumber,Metode Bayar,Catatan Bayar,'
+        'Total,Diskon,Bayar Akhir,Sudah Dibayar,Sisa,Status Bayar,Status HPP',
       );
     for (final o in orders) {
       buffer.writeln([
@@ -858,6 +1016,7 @@ class PosProvider extends ChangeNotifier {
         o.customerName ?? '-',
         o.source,
         o.paymentMethod,
+        o.paymentNote ?? '-',
         o.totalAmount.round(),
         o.discountAmount.round(),
         o.finalAmount.round(),

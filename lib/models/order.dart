@@ -72,6 +72,9 @@ class OrderModel {
   final double paymentAmount;
   final double changeAmount;
   final String paymentMethod; // 'Tunai', 'QRIS', 'Transfer', 'Kasbon'
+
+  /// Transfer account and/or reference number for non-cash payments.
+  final String? paymentNote;
   final String? customerName;
   final String? customerPhone;
   final String? tableNumber;
@@ -96,6 +99,7 @@ class OrderModel {
     required this.paymentAmount,
     required this.changeAmount,
     required this.paymentMethod,
+    this.paymentNote,
     this.customerName,
     this.customerPhone,
     this.tableNumber,
@@ -128,6 +132,7 @@ class OrderModel {
       paymentAmount: paymentAmount,
       changeAmount: changeAmount,
       paymentMethod: paymentMethod,
+      paymentNote: paymentNote,
       customerName: customerName,
       customerPhone: customerPhone,
       tableNumber: tableNumber,
@@ -153,6 +158,7 @@ class OrderModel {
       'payment_amount': paymentAmount,
       'change_amount': changeAmount,
       'payment_method': paymentMethod,
+      'payment_note': paymentNote,
       'customer_name': customerName,
       'customer_phone': customerPhone,
       'table_number': tableNumber,
@@ -180,6 +186,7 @@ class OrderModel {
       paymentAmount: (map['payment_amount'] as num).toDouble(),
       changeAmount: (map['change_amount'] as num).toDouble(),
       paymentMethod: map['payment_method'] as String,
+      paymentNote: map['payment_note'] as String?,
       customerName: map['customer_name'] as String?,
       customerPhone: map['customer_phone'] as String?,
       tableNumber: map['table_number'] as String?,

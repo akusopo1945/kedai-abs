@@ -24,6 +24,7 @@ class DatabaseHelper {
     'categories',
     'products',
     'store_settings',
+    'app_settings',
     'shifts',
     'orders',
     'order_items',
@@ -139,6 +140,7 @@ class DatabaseHelper {
     await _seedInitialData(db);
     await _createIndexes(db);
     await _migrateToV5(db);
+    await _migrateToV6(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -193,6 +195,21 @@ class DatabaseHelper {
     if (oldVersion < 5) {
       await _migrateToV5(db);
     }
+    if (oldVersion < 6) {
+      await _migrateToV6(db);
+    }
+  }
+
+  /// Key-value settings (payment methods, QRIS image, printer) and the
+  /// payment note on orders. Idempotent like [_migrateToV5].
+  Future<void> _migrateToV6(DatabaseExecutor db) async {
+    await _addColumnIfMissing(db, 'orders', 'payment_note', 'TEXT');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   /// Shifts, payments (cash ledger incl. debt repayments) and persisted open
@@ -803,6 +820,7 @@ class DatabaseHelper {
     required double amount,
     required String method,
     required int? shiftId,
+    String? note,
   }) async {
     final db = await instance.database;
     return db.transaction((txn) async {
@@ -831,6 +849,7 @@ class DatabaseHelper {
           method: method,
           paidAt: DateTime.now(),
           shiftId: shiftId,
+          note: note,
         ).toMap(),
         'order_id': orderId,
       });
@@ -849,6 +868,29 @@ class DatabaseHelper {
       );
       return remaining > 0 ? remaining : 0;
     });
+  }
+
+  // --- Key-value settings ---
+  Future<Map<String, String>> getAllSettings() async {
+    final db = await instance.database;
+    final rows = await db.query('app_settings');
+    return {
+      for (final row in rows) row['key'] as String: row['value'] as String,
+    };
+  }
+
+  /// A null [value] deletes the key.
+  Future<void> setSetting(String key, String? value) async {
+    final db = await instance.database;
+    if (value == null) {
+      await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+      return;
+    }
+    await db.insert(
+      'app_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   // --- Shifts ---

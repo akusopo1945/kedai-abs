@@ -224,7 +224,10 @@ void main() {
     final legacy = await pos.exportBackupJson();
     // Simulate an old backup: no payment ledger, no v5 order columns.
     final legacyWithOrder = legacy
-        .replaceFirst('"schema_version":5', '"schema_version":4')
+        .replaceFirst(
+          '"schema_version":${AppConstants.dbVersion}',
+          '"schema_version":4',
+        )
         .replaceFirst(
           '"orders":[]',
           '"orders":[{"id":7,"invoice_number":"INV-LAMA","created_at":"2026-01-02T10:00:00.000",'
@@ -233,6 +236,7 @@ void main() {
               '"status":"selesai","cost_known":1}]',
         );
     expect(legacyWithOrder, contains('INV-LAMA'));
+    expect(legacyWithOrder, contains('"schema_version":4'));
 
     await pos.restoreBackupJson(legacyWithOrder);
     await pos.setReportRange('all');

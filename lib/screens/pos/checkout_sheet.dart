@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../models/order.dart';
+import '../../models/payment_settings.dart';
 import '../../providers/pos_provider.dart';
+import '../../widgets/qris_view.dart';
 import 'receipt_screen.dart';
 
 class CheckoutSheet extends StatefulWidget {
@@ -18,9 +22,18 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
   final TextEditingController _cashController = TextEditingController();
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _referenceController = TextEditingController();
   String _selectedPaymentMethod = AppConstants.paymentCash;
+  int _selectedAccount = 0;
   double _paidAmount = 0.0;
   bool _isProcessing = false;
+
+  static const Map<String, IconData> _methodIcons = {
+    AppConstants.paymentCash: Icons.payments_outlined,
+    AppConstants.paymentQris: Icons.qr_code_2,
+    AppConstants.paymentTransfer: Icons.account_balance_outlined,
+    AppConstants.paymentDebt: Icons.menu_book_outlined,
+  };
 
   @override
   void initState() {
@@ -35,6 +48,7 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
     _cashController.dispose();
     _customerController.dispose();
     _phoneController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
@@ -45,16 +59,43 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
     });
   }
 
+  bool get _isCash => _selectedPaymentMethod == AppConstants.paymentCash;
+  bool get _isDebt => _selectedPaymentMethod == AppConstants.paymentDebt;
+  bool get _isQris => _selectedPaymentMethod == AppConstants.paymentQris;
+  bool get _isTransfer =>
+      _selectedPaymentMethod == AppConstants.paymentTransfer;
+
+  /// Account + reference stored with non-cash payments.
+  String? _paymentNote(PaymentSettings settings) {
+    final parts = <String>[];
+    if (_isTransfer && settings.bankAccounts.isNotEmpty) {
+      final index = _selectedAccount.clamp(0, settings.bankAccounts.length - 1);
+      parts.add('Ke ${settings.bankAccounts[index].label}');
+    }
+    final reference = _referenceController.text.trim();
+    if ((_isTransfer || _isQris) && reference.isNotEmpty) {
+      parts.add('Ref $reference');
+    }
+    return parts.isEmpty ? null : parts.join(' | ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final pos = context.watch<PosProvider>();
+    final settings = pos.paymentSettings;
+    final methods = pos.enabledPaymentMethods;
+    if (!methods.contains(_selectedPaymentMethod)) {
+      _selectedPaymentMethod = AppConstants.paymentCash;
+    }
     final total = pos.cartTotal;
     final change = (_paidAmount - total).clamp(0.0, double.infinity);
-    final isDebt = _selectedPaymentMethod == AppConstants.paymentDebt;
-    final canPay = isDebt
+    final needsReference =
+        settings.requireReference && (_isQris || _isTransfer);
+    final canPay = _isDebt
         ? _customerController.text.trim().isNotEmpty
-        : _selectedPaymentMethod != AppConstants.paymentCash ||
-            _paidAmount >= total;
+        : _isCash
+            ? _paidAmount >= total
+            : !needsReference || _referenceController.text.trim().isNotEmpty;
 
     return Container(
       padding: EdgeInsets.only(
@@ -68,7 +109,6 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle Bar
             Center(
               child: Container(
                 width: 40,
@@ -80,8 +120,6 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
                 ),
               ),
             ),
-
-            // Sheet Title
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -103,20 +141,18 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
               ],
             ),
             const SizedBox(height: 16),
-
-            // Customer Name
             TextField(
               controller: _customerController,
               textCapitalization: TextCapitalization.words,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                labelText: isDebt
+                labelText: _isDebt
                     ? 'Nama Pelanggan (wajib untuk kasbon)'
                     : 'Nama Pelanggan (Opsional)',
                 prefixIcon: const Icon(Icons.person_outline, size: 20),
               ),
             ),
-            if (isDebt) ...[
+            if (_isDebt) ...[
               const SizedBox(height: 10),
               TextField(
                 controller: _phoneController,
@@ -128,8 +164,6 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
               ),
             ],
             const SizedBox(height: 16),
-
-            // Payment Methods
             const Text(
               'Metode Pembayaran',
               style: TextStyle(
@@ -141,44 +175,21 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildMethodChip(
-                  AppConstants.paymentCash,
-                  Icons.payments_outlined,
-                ),
-                const SizedBox(width: 8),
-                _buildMethodChip(
-                  AppConstants.paymentQris,
-                  Icons.qr_code_scanner,
-                ),
-                const SizedBox(width: 8),
-                _buildMethodChip(
-                  AppConstants.paymentTransfer,
-                  Icons.account_balance_outlined,
-                ),
-                const SizedBox(width: 8),
-                _buildMethodChip(
-                  AppConstants.paymentDebt,
-                  Icons.menu_book_outlined,
-                ),
+                for (var i = 0; i < methods.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  _buildMethodChip(methods[i], _methodIcons[methods[i]]!),
+                ],
               ],
             ),
-            if (isDebt) ...[
-              const SizedBox(height: 10),
-              const Text(
-                'Pesanan dicatat sebagai piutang. Terima pembayarannya nanti '
-                'lewat Laporan > Kasbon.',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-            ],
             const SizedBox(height: 16),
-
-            // Total Tagihan Box
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppTheme.primaryLight,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -203,136 +214,39 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Cash input & chips if Tunai
-            if (_selectedPaymentMethod == AppConstants.paymentCash) ...[
+            if (_isCash) ..._buildCashSection(total, change),
+            if (_isQris) ..._buildQrisSection(pos, total),
+            if (_isTransfer) ..._buildTransferSection(settings, total),
+            if (_isQris || _isTransfer) ...[
               TextField(
-                controller: _cashController,
-                keyboardType: TextInputType.number,
-                onChanged: (val) {
-                  setState(() {
-                    _paidAmount = double.tryParse(val) ?? 0.0;
-                  });
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Nominal Uang Diterima',
-                  prefixText: 'Rp ',
-                  prefixIcon: Icon(Icons.money, size: 20),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ActionChip(
-                    label: const Text('Uang Pas'),
-                    onPressed: () => _setAmount(total),
-                    backgroundColor: _paidAmount == total
-                        ? AppTheme.primaryLight
-                        : AppTheme.surface,
-                  ),
-                  ...AppConstants.quickCashDenominations.map((denom) {
-                    if (denom >= total) {
-                      return ActionChip(
-                        label: Text(CurrencyFormatter.formatShort(denom)),
-                        onPressed: () => _setAmount(denom.toDouble()),
-                        backgroundColor: _paidAmount == denom
-                            ? AppTheme.primaryLight
-                            : AppTheme.surface,
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Change Calculation
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: change > 0 ? AppTheme.surface : AppTheme.borderSubtle,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Kembalian',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      CurrencyFormatter.format(change),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color:
-                            change > 0 ? AppTheme.accent : AppTheme.textPrimary,
-                      ),
-                    ),
-                  ],
+                controller: _referenceController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: needsReference
+                      ? 'No. Referensi / 4 digit terakhir (wajib)'
+                      : 'No. Referensi (opsional)',
+                  helperText: 'Cocokkan dengan notifikasi dana masuk sebelum '
+                      'menyelesaikan transaksi.',
+                  prefixIcon: const Icon(Icons.tag, size: 20),
                 ),
               ),
               const SizedBox(height: 20),
             ],
-
-            // Submit Button
+            if (_isDebt) ...[
+              const Text(
+                'Pesanan dicatat sebagai piutang. Terima pembayarannya nanti '
+                'lewat Laporan > Kasbon.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 20),
+            ],
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 onPressed: (!canPay || _isProcessing)
                     ? null
-                    : () async {
-                        setState(() => _isProcessing = true);
-                        final navigator = Navigator.of(context);
-                        final messenger = ScaffoldMessenger.of(context);
-                        final customerName = _customerController.text.trim();
-                        final customerPhone = _phoneController.text.trim();
-                        final OrderModel? createdOrder;
-                        try {
-                          createdOrder = await pos.checkout(
-                            paymentAmount: _selectedPaymentMethod ==
-                                    AppConstants.paymentCash
-                                ? _paidAmount
-                                : total,
-                            paymentMethod: _selectedPaymentMethod,
-                            customerName:
-                                customerName.isEmpty ? null : customerName,
-                            customerPhone: isDebt && customerPhone.isNotEmpty
-                                ? customerPhone
-                                : null,
-                          );
-                        } catch (e) {
-                          if (mounted) setState(() => _isProcessing = false);
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Transaksi gagal disimpan: $e'),
-                              backgroundColor: AppTheme.danger,
-                            ),
-                          );
-                          return;
-                        }
-
-                        if (!mounted) return;
-                        navigator.pop(); // Close sheet
-                        if (createdOrder != null) {
-                          final receiptOrder = createdOrder;
-                          navigator.push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  ReceiptScreen(order: receiptOrder),
-                            ),
-                          );
-                        }
-                      },
+                    : () => _submit(pos, total),
                 child: _isProcessing
                     ? const SizedBox(
                         width: 20,
@@ -343,9 +257,11 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
                         ),
                       )
                     : Text(
-                        isDebt
+                        _isDebt
                             ? 'Simpan sebagai Kasbon'
-                            : 'Konfirmasi & Selesaikan Transaksi',
+                            : _isCash
+                                ? 'Konfirmasi & Selesaikan Transaksi'
+                                : 'Dana Sudah Masuk, Selesaikan',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -357,6 +273,252 @@ class _CheckoutSheetState extends State<CheckoutSheet> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildCashSection(double total, double change) {
+    return [
+      TextField(
+        controller: _cashController,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        onChanged: (val) {
+          setState(() {
+            _paidAmount = double.tryParse(val) ?? 0.0;
+          });
+        },
+        decoration: const InputDecoration(
+          labelText: 'Nominal Uang Diterima',
+          prefixText: 'Rp ',
+          prefixIcon: Icon(Icons.money, size: 20),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          ActionChip(
+            label: const Text('Uang Pas'),
+            onPressed: () => _setAmount(total),
+            backgroundColor:
+                _paidAmount == total ? AppTheme.primaryLight : AppTheme.surface,
+          ),
+          for (final denom in AppConstants.quickCashDenominations)
+            if (denom >= total)
+              ActionChip(
+                label: Text(CurrencyFormatter.formatShort(denom)),
+                onPressed: () => _setAmount(denom.toDouble()),
+                backgroundColor: _paidAmount == denom
+                    ? AppTheme.primaryLight
+                    : AppTheme.surface,
+              ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: change > 0 ? AppTheme.surface : AppTheme.borderSubtle,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Kembalian',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            Text(
+              CurrencyFormatter.format(change),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: change > 0 ? AppTheme.accent : AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+    ];
+  }
+
+  List<Widget> _buildQrisSection(PosProvider pos, double total) {
+    final image = pos.qrisImage;
+    if (image == null) {
+      return [
+        _hint(
+          'Gambar QRIS belum diunggah. Tambahkan di Pengaturan > Pembayaran '
+          'agar bisa ditampilkan ke pelanggan.',
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    return [
+      Center(
+        child: GestureDetector(
+          onTap: () => showQrisFullScreen(
+            context,
+            image: image,
+            storeName: pos.storeProfile.name,
+            amount: total,
+          ),
+          child: QrisView(image: image, size: 200),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Center(
+        child: TextButton.icon(
+          onPressed: () => showQrisFullScreen(
+            context,
+            image: image,
+            storeName: pos.storeProfile.name,
+            amount: total,
+          ),
+          icon: const Icon(Icons.fullscreen, size: 18),
+          label: const Text('Tampilkan Layar Penuh ke Pelanggan'),
+        ),
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
+  List<Widget> _buildTransferSection(PaymentSettings settings, double total) {
+    final accounts = settings.bankAccounts;
+    if (accounts.isEmpty) {
+      return [
+        _hint(
+          'Belum ada rekening tujuan. Tambahkan rekening bank atau e-wallet '
+          'di Pengaturan > Pembayaran.',
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    final selected = _selectedAccount.clamp(0, accounts.length - 1);
+    return [
+      const Text(
+        'Transfer ke',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 6),
+      for (var i = 0; i < accounts.length; i++)
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: i == selected ? AppTheme.primary : AppTheme.border,
+              width: i == selected ? 1.5 : 1,
+            ),
+          ),
+          child: ListTile(
+            dense: true,
+            onTap: () => setState(() => _selectedAccount = i),
+            leading: Icon(
+              i == selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: i == selected ? AppTheme.primary : AppTheme.textMuted,
+            ),
+            title: Text(
+              '${accounts[i].bankName} • ${accounts[i].accountNumber}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            subtitle: Text('a.n. ${accounts[i].accountHolder}'),
+            trailing: IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              tooltip: 'Salin nomor rekening',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await Clipboard.setData(
+                  ClipboardData(text: accounts[i].accountNumber),
+                );
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Nomor ${accounts[i].bankName} disalin. Nominal: '
+                      '${CurrencyFormatter.format(total)}',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      const SizedBox(height: 4),
+    ];
+  }
+
+  Widget _hint(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+      ),
+    );
+  }
+
+  Future<void> _submit(PosProvider pos, double total) async {
+    setState(() => _isProcessing = true);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final customerName = _customerController.text.trim();
+    final customerPhone = _phoneController.text.trim();
+    final OrderModel? createdOrder;
+    try {
+      createdOrder = await pos.checkout(
+        paymentAmount: _isCash ? _paidAmount : total,
+        paymentMethod: _selectedPaymentMethod,
+        customerName: customerName.isEmpty ? null : customerName,
+        customerPhone:
+            _isDebt && customerPhone.isNotEmpty ? customerPhone : null,
+        paymentNote: _paymentNote(pos.paymentSettings),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _isProcessing = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Transaksi gagal disimpan: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    navigator.pop();
+    if (createdOrder == null) return;
+    final receiptOrder = createdOrder;
+    navigator.push(
+      MaterialPageRoute(builder: (_) => ReceiptScreen(order: receiptOrder)),
+    );
+
+    // Printing must never block or undo a saved sale.
+    final printError = await pos.handleCompletedSale(receiptOrder);
+    if (printError != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Transaksi tersimpan, tetapi struk gagal dicetak: '
+              '$printError'),
+          backgroundColor: AppTheme.danger,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Widget _buildMethodChip(String method, IconData icon) {

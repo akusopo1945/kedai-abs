@@ -144,6 +144,11 @@ class _ClosingScreenState extends State<ClosingScreen> {
           'Google Drive atau WhatsApp pemilik.',
         ),
         actions: [
+          if (pos.printerSettings.isConfigured)
+            TextButton(
+              onPressed: () => _printReport(report),
+              child: const Text('Cetak Rekap'),
+            ),
           TextButton(
             onPressed: () => _shareBackup(report),
             child: const Text('Kirim Cadangan Lagi'),
@@ -156,6 +161,19 @@ class _ClosingScreenState extends State<ClosingScreen> {
       ),
     );
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _printReport(String report) async {
+    final pos = context.read<PosProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final lines = report.split('\n').where((line) => line.trim().isNotEmpty);
+    final error = await pos.printDocument(lines.first, lines.skip(1).toList());
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Rekap closing dicetak.'),
+        backgroundColor: error == null ? AppTheme.accent : AppTheme.danger,
+      ),
+    );
   }
 
   Future<void> _shareBackup(String report) async {

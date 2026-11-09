@@ -7,16 +7,19 @@ Aplikasi Point of Sale (POS) Android berbasis **Flutter** dengan konsep **Offlin
 1. **Mesin Kasir (POS):**
    - Katalog produk berbasis kategori & pencarian instan.
    - Keranjang belanja interaktif dengan tombol kuantitas cepat.
-   - Pilihan metode bayar: Tunai, QRIS, Transfer Bank.
+   - Pilihan metode bayar: Tunai, QRIS, Transfer Bank / E-Wallet, Kasbon (bisa diaktif/nonaktifkan).
+   - QRIS statis diunggah sekali dan ditampilkan layar penuh ke pelanggan; rekening transfer tampil dengan tombol salin.
+   - No. referensi pembayaran (opsional atau wajib) tersimpan di transaksi, struk, dan rekap CSV.
    - Tombol nominal uang pas & pecahan cepat (Rp 10.000, 20.000, 50.000, 100.000).
    - Perhitungan otomatis uang kembalian.
 2. **Manajemen Produk & Stok:**
    - Tambah, edit, dan hapus katalog produk.
    - Penetapan harga beli (modal), harga jual, dan perhitungan margin keuntungan.
    - Pengingat stok menipis (*low-stock badge*).
-3. **Cetak Struk Pembayaran:**
-   - Pratinjau struk realistis dengan format struk belanja.
-   - Siap integrasi printer thermal Bluetooth (ESC/POS 58mm / 80mm).
+3. **Cetak Struk Bluetooth (ESC/POS 58mm / 80mm):**
+   - Pilih printer thermal Bluetooth yang sudah dipasangkan di Android (tanpa izin lokasi).
+   - Cetak otomatis setelah transaksi, 1–3 salinan, potong kertas otomatis, dan buka laci kas untuk pembayaran tunai.
+   - Cetak ulang struk, tes cetak, cetak rekap closing, atau kirim struk lewat WhatsApp.
 4. **Laporan & Ringkasan Penjualan:**
    - Ringkasan omzet harian & laba bersih (*net profit*).
    - Riwayat transaksi detail dan pencetakan ulang struk.
