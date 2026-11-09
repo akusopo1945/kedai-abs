@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../core/constants/app_constants.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../models/order.dart';
 import '../../providers/pos_provider.dart';
+import '../settings/printer_settings_screen.dart';
 
 class ReceiptScreen extends StatelessWidget {
   final OrderModel order;
@@ -120,6 +125,18 @@ class ReceiptScreen extends StatelessWidget {
                   if (order.customerName != null)
                     _buildRow('Pelanggan', order.customerName!),
                   _buildRow('Metode Bayar', order.paymentMethod),
+                  if (order.paymentNote != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        order.paymentNote!,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   _buildDashedLine(),
                   const SizedBox(height: 16),
@@ -171,14 +188,52 @@ class ReceiptScreen extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   // Summary Totals
-                  _buildRow('Subtotal', CurrencyFormatter.format(order.totalAmount)),
+                  _buildRow(
+                    'Subtotal',
+                    CurrencyFormatter.format(order.totalAmount),
+                  ),
                   if (order.discountAmount > 0)
-                    _buildRow('Diskon', '-${CurrencyFormatter.format(order.discountAmount)}',
-                        valueColor: AppTheme.danger),
-                  _buildRow('Total', CurrencyFormatter.format(order.finalAmount), isBold: true),
-                  _buildRow('Diterima', CurrencyFormatter.format(order.paymentAmount)),
-                  _buildRow('Kembalian', CurrencyFormatter.format(order.changeAmount),
-                      valueColor: AppTheme.accent, isBold: true),
+                    _buildRow(
+                      'Diskon',
+                      '-${CurrencyFormatter.format(order.discountAmount)}',
+                      valueColor: AppTheme.danger,
+                    ),
+                  _buildRow(
+                    'Total',
+                    CurrencyFormatter.format(order.finalAmount),
+                    isBold: true,
+                  ),
+                  if (order.isDebt) ...[
+                    _buildRow(
+                      'Sudah Dibayar',
+                      CurrencyFormatter.format(order.paidAmount),
+                    ),
+                    _buildRow(
+                      'Sisa Kasbon',
+                      CurrencyFormatter.format(order.outstandingAmount),
+                      valueColor: AppTheme.danger,
+                      isBold: true,
+                    ),
+                  ] else if (order.paymentMethod ==
+                      AppConstants.paymentDebt) ...[
+                    _buildRow(
+                      'Status',
+                      'Kasbon lunas',
+                      valueColor: AppTheme.accent,
+                      isBold: true,
+                    ),
+                  ] else ...[
+                    _buildRow(
+                      'Diterima',
+                      CurrencyFormatter.format(order.paymentAmount),
+                    ),
+                    _buildRow(
+                      'Kembalian',
+                      CurrencyFormatter.format(order.changeAmount),
+                      valueColor: AppTheme.accent,
+                      isBold: true,
+                    ),
+                  ],
 
                   const SizedBox(height: 20),
                   _buildDashedLine(),
@@ -200,28 +255,8 @@ class ReceiptScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Print Action Button
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.print_outlined, size: 20),
-                label: const Text('Cetak Struk (Bluetooth ESC/POS)'),
-                onPressed: () {
-                  PrinterService.instance.generateReceiptText(
-                    order: order,
-                    store: store,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Perintah cetak terkirim ke printer:\n${order.invoiceNumber}'),
-                      backgroundColor: AppTheme.primary,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                },
-              ),
-            ),
+            // Print & share actions
+            _ReceiptActions(order: order),
             const SizedBox(height: 10),
 
             // New Transaction Button
@@ -239,7 +274,12 @@ class ReceiptScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, String value, {bool isBold = false, Color? valueColor}) {
+  Widget _buildRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -287,6 +327,108 @@ class ReceiptScreen extends StatelessWidget {
           }),
         );
       },
+    );
+  }
+}
+
+class _ReceiptActions extends StatefulWidget {
+  final OrderModel order;
+
+  const _ReceiptActions({required this.order});
+
+  @override
+  State<_ReceiptActions> createState() => _ReceiptActionsState();
+}
+
+class _ReceiptActionsState extends State<_ReceiptActions> {
+  bool _printing = false;
+
+  Future<void> _print(PosProvider pos) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!pos.printerSettings.isConfigured) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Printer belum dipilih.'),
+          action: SnackBarAction(
+            label: 'Atur',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PrinterSettingsScreen()),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _printing = true);
+    final error = await pos.printReceipt(widget.order);
+    if (mounted) setState(() => _printing = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Struk ${widget.order.invoiceNumber} dicetak.'),
+        backgroundColor: error == null ? AppTheme.accent : AppTheme.danger,
+        duration: Duration(seconds: error == null ? 2 : 5),
+      ),
+    );
+  }
+
+  Future<void> _share(PosProvider pos) async {
+    final text = PrinterService.instance.generateReceiptText(
+      order: widget.order,
+      store: pos.storeProfile,
+    );
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: text, subject: 'Struk ${widget.order.invoiceNumber}'),
+      );
+    } catch (_) {
+      // Share sheet unavailable: fall back to the clipboard.
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Teks struk disalin ke clipboard.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pos = context.read<PosProvider>();
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _printing ? null : () => _print(pos),
+              icon: _printing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.print_outlined, size: 20),
+              label: const Text('Cetak Struk'),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: () => _share(pos),
+              icon: const Icon(Icons.share_outlined, size: 20),
+              label: const Text('Kirim'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

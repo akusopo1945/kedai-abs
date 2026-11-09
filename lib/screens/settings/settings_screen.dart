@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/services/backup_service.dart';
 import '../../core/services/menu_jajan_api_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/store_profile.dart';
 import '../../providers/pos_provider.dart';
+import 'payment_settings_screen.dart';
+import 'printer_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -29,7 +32,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final profile = Provider.of<PosProvider>(context, listen: false).storeProfile;
+    final profile =
+        Provider.of<PosProvider>(context, listen: false).storeProfile;
     _nameController = TextEditingController(text: profile.name);
     _addressController = TextEditingController(text: profile.address);
     _phoneController = TextEditingController(text: profile.phone);
@@ -46,6 +50,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _footerController.dispose();
     _serverUrlController.dispose();
     super.dispose();
+  }
+
+  void _loadProfileIntoForm(StoreProfile profile) {
+    setState(() {
+      _nameController.text = profile.name;
+      _addressController.text = profile.address;
+      _phoneController.text = profile.phone;
+      _footerController.text = profile.receiptFooter;
+      _serverUrlController.text = profile.serverUrl;
+      _paperWidth = profile.paperWidth;
+    });
+  }
+
+  Future<void> _handleShareBackup(PosProvider pos) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await BackupService.shareBackup(pos);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal membuat cadangan: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleRestoreBackup(PosProvider pos) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pulihkan dari cadangan?'),
+        content: const Text(
+          'Semua data di HP ini (produk, transaksi, kasbon, shift) akan '
+          'diganti dengan isi file cadangan. Tindakan ini tidak bisa dibatalkan. '
+          'Kirim cadangan data saat ini dulu jika masih dibutuhkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('Pilih File & Pulihkan'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final raw = await BackupService.pickBackupFile();
+      if (raw == null) return;
+      await pos.restoreBackupJson(raw);
+      if (!mounted) return;
+      _loadProfileIntoForm(pos.storeProfile);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Data berhasil dipulihkan dari cadangan.'),
+          backgroundColor: AppTheme.accent,
+        ),
+      );
+    } on FormatException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppTheme.danger),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal memulihkan data: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   Future<void> _handleTestApi(PosProvider pos) async {
@@ -68,7 +149,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.message ?? (result.isSuccess ? 'Terhubung!' : 'Koneksi gagal')),
+          content: Text(result.message ??
+              (result.isSuccess ? 'Terhubung!' : 'Koneksi gagal')),
           backgroundColor: result.isSuccess ? AppTheme.accent : AppTheme.danger,
         ),
       );
@@ -132,19 +214,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(labelText: 'Nama Kedai / Usaha *'),
-                      validator: (v) => v == null || v.isEmpty ? 'Nama wajib diisi' : null,
+                      decoration: const InputDecoration(
+                          labelText: 'Nama Kedai / Usaha *'),
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Nama wajib diisi' : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _addressController,
-                      decoration: const InputDecoration(labelText: 'Alamat Usaha'),
+                      decoration:
+                          const InputDecoration(labelText: 'Alamat Usaha'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Nomor Telepon / WhatsApp'),
+                      decoration: const InputDecoration(
+                          labelText: 'Nomor Telepon / WhatsApp'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -183,38 +269,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     const Text(
                       'Ukuran Kertas Thermal',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
                           child: RadioListTile<int>(
-                            title: const Text('58 mm', style: TextStyle(fontSize: 13)),
-                            subtitle: const Text('Printer mini portabel', style: TextStyle(fontSize: 11)),
+                            title: const Text('58 mm',
+                                style: TextStyle(fontSize: 13)),
+                            subtitle: const Text('Printer mini portabel',
+                                style: TextStyle(fontSize: 11)),
                             value: 58,
                             groupValue: _paperWidth,
                             contentPadding: EdgeInsets.zero,
                             onChanged: (val) {
-                              if (val != null) setState(() => _paperWidth = val);
+                              if (val != null)
+                                setState(() => _paperWidth = val);
                             },
                           ),
                         ),
                         Expanded(
                           child: RadioListTile<int>(
-                            title: const Text('80 mm', style: TextStyle(fontSize: 13)),
-                            subtitle: const Text('Printer desktop standar', style: TextStyle(fontSize: 11)),
+                            title: const Text('80 mm',
+                                style: TextStyle(fontSize: 13)),
+                            subtitle: const Text('Printer desktop standar',
+                                style: TextStyle(fontSize: 11)),
                             value: 80,
                             groupValue: _paperWidth,
                             contentPadding: EdgeInsets.zero,
                             onChanged: (val) {
-                              if (val != null) setState(() => _paperWidth = val);
+                              if (val != null)
+                                setState(() => _paperWidth = val);
                             },
                           ),
                         ),
                       ],
                     ),
+                    const Divider(),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.print_outlined,
+                          color: AppTheme.primary),
+                      title: const Text('Printer Bluetooth'),
+                      subtitle: Text(
+                        pos.printerSettings.isConfigured
+                            ? (pos.printerSettings.name ??
+                                pos.printerSettings.address!)
+                            : 'Belum terhubung',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PrinterSettingsScreen(),
+                        ),
+                      ),
+                    ),
                   ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                'Pembayaran',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.qr_code_2, color: AppTheme.primary),
+                  title: const Text('QRIS, Rekening Transfer & Metode Bayar'),
+                  subtitle: Text(
+                    '${pos.qrisImage == null ? 'QRIS belum diunggah' : 'QRIS tersimpan'}'
+                    ' • ${pos.paymentSettings.bankAccounts.length} rekening',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PaymentSettingsScreen(),
+                    ),
+                  ),
                 ),
               ),
 
@@ -247,7 +394,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         hintText: 'http://13.211.188.77:3015',
                         prefixIcon: Icon(Icons.dns_outlined, size: 20),
                       ),
-                      validator: (v) => v == null || v.isEmpty ? 'URL Server wajib diisi' : null,
+                      validator: (v) => v == null || v.isEmpty
+                          ? 'URL Server wajib diisi'
+                          : null,
                     ),
                     const SizedBox(height: 12),
 
@@ -256,29 +405,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _isTestingApi ? null : () => _handleTestApi(pos),
+                            onPressed: _isTestingApi
+                                ? null
+                                : () => _handleTestApi(pos),
                             icon: _isTestingApi
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   )
                                 : const Icon(Icons.network_check, size: 18),
-                            label: Text(_isTestingApi ? 'Menguji...' : 'Tes Koneksi & API'),
+                            label: Text(_isTestingApi
+                                ? 'Menguji...'
+                                : 'Tes Koneksi & API'),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _isSyncingMenu ? null : () => _handleSyncMenu(pos),
+                            onPressed: _isSyncingMenu
+                                ? null
+                                : () => _handleSyncMenu(pos),
                             icon: _isSyncingMenu
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   )
                                 : const Icon(Icons.sync, size: 18),
-                            label: Text(_isSyncingMenu ? 'Menyinkronkan...' : 'Tarik Menu Web'),
+                            label: Text(_isSyncingMenu
+                                ? 'Menyinkronkan...'
+                                : 'Tarik Menu Web'),
                           ),
                         ),
                       ],
@@ -289,12 +448,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                        color: (_lastTestResult?.isSuccess ??
+                                pos.isOnlineSyncAvailable)
                             ? AppTheme.success.withOpacity(0.08)
                             : AppTheme.danger.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                          color: (_lastTestResult?.isSuccess ??
+                                  pos.isOnlineSyncAvailable)
                               ? AppTheme.success.withOpacity(0.3)
                               : AppTheme.danger.withOpacity(0.3),
                         ),
@@ -303,11 +464,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
-                            (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                            (_lastTestResult?.isSuccess ??
+                                    pos.isOnlineSyncAvailable)
                                 ? Icons.check_circle
                                 : Icons.error_outline,
                             size: 18,
-                            color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                            color: (_lastTestResult?.isSuccess ??
+                                    pos.isOnlineSyncAvailable)
                                 ? AppTheme.success
                                 : AppTheme.danger,
                           ),
@@ -317,13 +480,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                  (_lastTestResult?.isSuccess ??
+                                          pos.isOnlineSyncAvailable)
                                       ? 'Server Terhubung & Aktif'
                                       : 'Server Belum Terhubung',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: (_lastTestResult?.isSuccess ?? pos.isOnlineSyncAvailable)
+                                    color: (_lastTestResult?.isSuccess ??
+                                            pos.isOnlineSyncAvailable)
                                         ? AppTheme.success
                                         : AppTheme.danger,
                                   ),
@@ -334,7 +499,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       (pos.isOnlineSyncAvailable
                                           ? 'Sinkronisasi meja & pesanan mandiri QR online aktif.'
                                           : 'Pastikan IP VPS dan port 3015 terbuka di Security Group AWS.'),
-                                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary),
                                 ),
                                 if (_lastTestResult?.warungName != null) ...[
                                   const SizedBox(height: 4),
@@ -380,7 +547,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Pengaturan toko & koneksi server berhasil disimpan'),
+                            content: Text(
+                                'Pengaturan toko & koneksi server berhasil disimpan'),
                             backgroundColor: AppTheme.accent,
                           ),
                         );
@@ -392,11 +560,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 32),
 
+              // Backup & restore
+              const Text(
+                'Cadangan Data',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Semua data tersimpan di HP ini. Cadangan juga dikirim otomatis '
+                'saat Tutup Kasir. Simpan file ke Google Drive atau WhatsApp '
+                'pemilik agar data aman jika HP rusak atau hilang.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                      label: const Text('Kirim Cadangan'),
+                      onPressed: () => _handleShareBackup(pos),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.restore_outlined, size: 18),
+                      label: const Text('Pulihkan'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.danger,
+                        side: const BorderSide(color: AppTheme.danger),
+                      ),
+                      onPressed: () => _handleRestoreBackup(pos),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+
               // System Info
               Center(
                 child: Column(
                   children: [
-                    const Icon(Icons.offline_bolt_outlined, color: AppTheme.accent, size: 28),
+                    const Icon(Icons.offline_bolt_outlined,
+                        color: AppTheme.accent, size: 28),
                     const SizedBox(height: 4),
                     const Text(
                       'Arsitektur Hybrid: Offline-First SQLite + Online Sync VPS',
@@ -409,7 +621,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       'Versi ${AppConstants.appVersion} • Kedai POS Angkringan ABS',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.textMuted),
                     ),
                   ],
                 ),

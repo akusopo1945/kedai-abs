@@ -1,8 +1,25 @@
 class AppConstants {
   static const String appName = 'Kedai POS - Angkringan Bersua Sejenak';
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.3.0';
   static const String dbName = 'kedai_pos_abs.db';
-  static const int dbVersion = 2;
+  static const int dbVersion = 6;
+
+  // Payment methods
+  static const String paymentCash = 'Tunai';
+  static const String paymentQris = 'QRIS';
+  static const String paymentTransfer = 'Transfer';
+  static const String paymentDebt = 'Kasbon';
+  static const List<String> settlementMethods = [
+    paymentCash,
+    paymentQris,
+    paymentTransfer,
+  ];
+
+  /// Older records store cash as 'tunai' or 'cash'.
+  static bool isCashMethod(String method) {
+    final normalized = method.trim().toLowerCase();
+    return normalized == 'tunai' || normalized == 'cash';
+  }
 
   // Default Categories for Angkringan Bersua Sejenak
   static const List<String> defaultCategories = [
@@ -32,12 +49,7 @@ class AppConstants {
   ];
 
   // Quick cash payment chips
-  static const List<int> quickCashDenominations = [
-    10000,
-    20000,
-    50000,
-    100000,
-  ];
+  static const List<int> quickCashDenominations = [10000, 20000, 50000, 100000];
 
   // Default Sync Server URL (menu-jajan PM2 backend on VPS)
   static const String defaultServerUrl = 'http://13.211.188.77:3015';

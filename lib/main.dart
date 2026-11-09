@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/pos_provider.dart';
 import 'screens/main_navigation_screen.dart';
+import 'screens/splash/splash_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   final posProvider = PosProvider();
-  await posProvider.init();
+  unawaited(posProvider.init());
 
   runApp(
     MultiProvider(
@@ -29,7 +31,17 @@ class KedaiPosApp extends StatelessWidget {
       title: 'Kedai POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const MainNavigationScreen(),
+      home: Selector<PosProvider, bool>(
+        selector: (_, pos) => pos.isInitialized,
+        builder: (_, isInitialized, __) {
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            child: isInitialized
+                ? const MainNavigationScreen()
+                : const SplashScreen(),
+          );
+        },
+      ),
     );
   }
 }
